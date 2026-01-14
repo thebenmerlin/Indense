@@ -17,6 +17,45 @@ A production-grade material management application for construction sites with m
 - **Backend**: Node.js + Express + Prisma + PostgreSQL
 - **Mobile**: React Native + Expo + TypeScript
 
+## Repository Structure
+
+```
+indense/
+├── backend/                      # Node.js + Express API
+│   ├── prisma/
+│   │   ├── schema.prisma         # Database models
+│   │   └── seed.ts               # Test data
+│   └── src/
+│       ├── config/               # App configuration
+│       ├── middleware/           # Auth, RBAC, logging
+│       ├── modules/
+│       │   ├── auth/             # JWT authentication
+│       │   ├── users/            # User management
+│       │   ├── sites/            # Construction sites
+│       │   ├── materials/        # Material catalog
+│       │   ├── indents/          # Material requests
+│       │   ├── orders/           # Purchase orders
+│       │   ├── receipts/         # Goods receipts
+│       │   ├── returns/          # Material returns
+│       │   ├── reports/          # Analytics & exports
+│       │   └── notifications/    # Push notifications
+│       ├── types/                # TypeScript definitions
+│       └── utils/                # Helper functions
+│
+└── mobile/                       # React Native + Expo
+    ├── app/
+    │   ├── (auth)/               # Login screens
+    │   ├── (site-engineer)/      # Site Engineer dashboard
+    │   ├── (purchase-team)/      # Purchase Team dashboard
+    │   └── (director)/           # Director dashboard
+    └── src/
+        ├── api/                  # API client
+        ├── components/           # Shared UI components
+        ├── constants/            # App constants
+        ├── store/                # State management
+        └── types/                # TypeScript definitions
+```
+
 ## Getting Started
 
 ### Backend
