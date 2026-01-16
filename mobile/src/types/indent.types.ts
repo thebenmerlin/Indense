@@ -1,14 +1,44 @@
 import { IndentStatus, Priority } from '../constants/indentStatus';
 
+// =============================================================================
+// MATERIAL TYPES (Updated for normalized schema)
+// =============================================================================
+
+export interface ItemGroup {
+    id: string;
+    name: string;
+}
+
+export interface UnitOfMeasure {
+    id: string;
+    code: string;
+    name: string;
+}
+
 export interface Material {
     id: string;
     name: string;
     code: string;
-    category: string;
-    unit: string;
     description: string | null;
     specifications: Record<string, string[]> | null;
+    isActive: boolean;
+    itemGroup: ItemGroup;
+    unit: UnitOfMeasure;
 }
+
+/** Lightweight material for autocomplete suggestions */
+export interface MaterialSuggestion {
+    id: string;
+    name: string;
+    code: string;
+    unitCode: string;
+    unitName: string;
+    categoryName: string;
+}
+
+// =============================================================================
+// INDENT TYPES
+// =============================================================================
 
 export interface IndentItem {
     id: string;

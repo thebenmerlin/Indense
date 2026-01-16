@@ -138,7 +138,7 @@ export default function DirectorIndentDetails() {
                         <Text style={styles.materialName}>{item.material?.name}</Text>
                         <Text style={styles.materialCode}>{item.material?.code}</Text>
                         <Text style={styles.qty}>
-                            Requested: {item.requestedQty} {item.material?.unit}
+                            Requested: {item.requestedQty} {item.material?.unit?.code}
                         </Text>
                     </View>
                 ))}

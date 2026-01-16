@@ -98,19 +98,19 @@ export default function IndentDetails() {
                             <View style={styles.qtyItem}>
                                 <Text style={styles.qtyLabel}>Requested</Text>
                                 <Text style={styles.qtyValue}>
-                                    {item.requestedQty} {item.material?.unit}
+                                    {item.requestedQty} {item.material?.unit?.code}
                                 </Text>
                             </View>
                             <View style={styles.qtyItem}>
                                 <Text style={styles.qtyLabel}>Received</Text>
                                 <Text style={styles.qtyValue}>
-                                    {item.receivedQty} {item.material?.unit}
+                                    {item.receivedQty} {item.material?.unit?.code}
                                 </Text>
                             </View>
                             <View style={styles.qtyItem}>
                                 <Text style={styles.qtyLabel}>Pending</Text>
                                 <Text style={styles.qtyValue}>
-                                    {item.pendingQty} {item.material?.unit}
+                                    {item.pendingQty} {item.material?.unit?.code}
                                 </Text>
                             </View>
                         </View>
