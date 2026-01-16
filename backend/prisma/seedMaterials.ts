@@ -235,7 +235,8 @@ async function seedMaterials(): Promise<void> {
     console.log('\n📐 Creating Units of Measure...');
     const uomIdMap = new Map<string, string>();
 
-    for (const [code, uom] of uniqueUOMs) {
+    for (const entry of Array.from(uniqueUOMs.entries())) {
+        const [code, uom] = entry;
         const created = await prisma.unitOfMeasure.upsert({
             where: { code },
             update: { name: uom.name },
@@ -249,7 +250,7 @@ async function seedMaterials(): Promise<void> {
     console.log('\n📁 Creating Item Groups...');
     const groupIdMap = new Map<string, string>();
 
-    for (const groupName of uniqueItemGroups) {
+    for (const groupName of Array.from(uniqueItemGroups)) {
         const created = await prisma.itemGroup.upsert({
             where: { name: groupName },
             update: {},

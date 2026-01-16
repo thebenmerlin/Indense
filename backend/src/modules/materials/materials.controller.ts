@@ -45,6 +45,24 @@ class MaterialsController {
         }
     }
 
+    /**
+     * Fast autocomplete search for material names
+     * GET /materials/search?q=cement&itemGroupId=xxx&limit=20
+     */
+    async searchAutocomplete(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { q, itemGroupId, limit } = req.query;
+            const results = await materialsService.searchAutocomplete({
+                query: (q as string) || '',
+                itemGroupId: itemGroupId as string | undefined,
+                limit: limit ? parseInt(limit as string, 10) : undefined,
+            });
+            res.json({ success: true, data: results });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async create(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const material = await materialsService.create(req.body);

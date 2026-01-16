@@ -94,7 +94,7 @@ class ItemGroupsService {
             select: { name: true },
             orderBy: { name: 'asc' },
         });
-        return itemGroups.map((ig) => ig.name);
+        return itemGroups.map((ig: { name: string }) => ig.name);
     }
 }
 

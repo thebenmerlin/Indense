@@ -77,6 +77,65 @@ class MaterialsService {
         return units;
     }
 
+    /**
+     * Fast autocomplete search for material names
+     * Returns minimal data for quick typeahead suggestions
+     * @param query - Search query string (min 2 characters)
+     * @param itemGroupId - Optional filter by category
+     * @param limit - Max results to return (default 20)
+     */
+    async searchAutocomplete(params: {
+        query: string;
+        itemGroupId?: string;
+        limit?: number;
+    }): Promise<Array<{
+        id: string;
+        name: string;
+        code: string;
+        unitCode: string;
+        unitName: string;
+        categoryName: string;
+    }>> {
+        const { query, itemGroupId, limit = 20 } = params;
+
+        // Require minimum 2 characters for search
+        if (!query || query.length < 2) {
+            return [];
+        }
+
+        const where: Record<string, unknown> = {
+            isActive: true,
+            name: { contains: query, mode: 'insensitive' },
+        };
+
+        if (itemGroupId) {
+            where.itemGroupId = itemGroupId;
+        }
+
+        const materials = await prisma.material.findMany({
+            where,
+            select: {
+                id: true,
+                name: true,
+                code: true,
+                itemGroup: { select: { name: true } },
+                unit: { select: { code: true, name: true } },
+            },
+            take: Math.min(limit, 50), // Cap at 50 for performance
+            orderBy: { name: 'asc' },
+        });
+
+        // Transform to flat response for frontend efficiency
+        return materials.map((m) => ({
+            id: m.id,
+            name: m.name,
+            code: m.code,
+            unitCode: (m as { unit?: { code: string } }).unit?.code || '',
+            unitName: (m as { unit?: { name: string } }).unit?.name || '',
+            categoryName: (m as { itemGroup?: { name: string } }).itemGroup?.name || '',
+        }));
+    }
+
     async create(data: CreateMaterialDto): Promise<MaterialResponse> {
         const material = await prisma.material.create({
             data: {
