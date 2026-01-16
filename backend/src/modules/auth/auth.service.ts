@@ -210,8 +210,8 @@ class AuthService {
         };
 
         return jwt.sign(payload, authConfig.jwt.secret, {
-            expiresIn: authConfig.jwt.accessTokenExpiresIn,
-        });
+            expiresIn: authConfig.jwt.accessTokenExpiresIn as string,
+        } as jwt.SignOptions);
     }
 
     /**
@@ -246,8 +246,8 @@ class AuthService {
         };
 
         const token = jwt.sign(payload, authConfig.jwt.secret, {
-            expiresIn,
-        });
+            expiresIn: expiresIn as string,
+        } as jwt.SignOptions);
 
         // Store in database
         await prisma.refreshToken.create({

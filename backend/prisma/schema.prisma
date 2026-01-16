@@ -125,31 +125,76 @@ model Site {
 }
 
 // ============================================================================
+// ITEM GROUPS (Categories for Materials)
+// ============================================================================
+
+model ItemGroup {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  
+  // Relations
+  materials Material[]
+  
+  @@index([name])
+  @@index([isActive])
+}
+
+// ============================================================================
+// UNITS OF MEASURE
+// ============================================================================
+
+model UnitOfMeasure {
+  id        String     @id @default(uuid())
+  code      String     @unique  // e.g., "KG", "MTR", "SFT"
+  name      String               // Full name: "Kilogram", "Meter", "Square Foot"
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  
+  // Relations
+  materials Material[]
+  
+  @@index([code])
+  @@index([isActive])
+}
+
+// ============================================================================
 // MATERIALS (Master Data)
 // ============================================================================
 
 model Material {
-  id          String   @id @default(uuid())
-  name        String
-  code        String   @unique
-  category    String
-  unit        String   // e.g., "kg", "pieces", "meters", "cubic meters"
-  description String?
-  isActive    Boolean  @default(true)
+  id            String   @id @default(uuid())
+  name          String
+  code          String   @unique
+  description   String?
+  isActive      Boolean  @default(true)
+  isSystemData  Boolean  @default(false)  // True for seeded materials from Excel
+  
+  // Foreign key to ItemGroup (category)
+  itemGroupId   String
+  itemGroup     ItemGroup @relation(fields: [itemGroupId], references: [id])
+  
+  // Foreign key to UnitOfMeasure
+  unitId        String
+  unit          UnitOfMeasure @relation(fields: [unitId], references: [id])
   
   // Extensible specifications as JSON
   // Contains available options for size, dimensions, colors, etc.
   specifications Json?  // { "sizes": ["S", "M", "L"], "colors": ["Red", "Blue"], "dimensions": [...] }
   
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   
   // Relations
-  indentItems IndentItem[]
+  indentItems   IndentItem[]
   
   @@index([name])
   @@index([code])
-  @@index([category])
+  @@index([itemGroupId])
+  @@index([unitId])
 }
 
 // ============================================================================

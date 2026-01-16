@@ -285,7 +285,8 @@ class IndentsService {
         if (!indent) throw new NotFoundError('Indent not found');
 
         // Can only reject from SUBMITTED or PURCHASE_APPROVED states
-        if (![IndentStatus.SUBMITTED, IndentStatus.PURCHASE_APPROVED].includes(indent.status)) {
+        const rejectableStatuses: IndentStatus[] = [IndentStatus.SUBMITTED, IndentStatus.PURCHASE_APPROVED];
+        if (!rejectableStatuses.includes(indent.status)) {
             throw new BadRequestError(`Cannot reject indent in ${indent.status} status`);
         }
 

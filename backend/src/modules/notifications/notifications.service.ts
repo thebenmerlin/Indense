@@ -16,7 +16,7 @@ class NotificationsService {
                 title: data.title,
                 message: data.message,
                 indentId: data.indentId,
-                data: data.data,
+                data: data.data as object | undefined,
             },
         });
     }

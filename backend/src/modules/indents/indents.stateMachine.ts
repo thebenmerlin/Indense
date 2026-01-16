@@ -115,12 +115,13 @@ export function canClose(status: IndentStatus): boolean {
  * Check if indent status allows viewing order details
  */
 export function hasOrderDetails(status: IndentStatus): boolean {
-    return [
+    const orderStatuses: IndentStatus[] = [
         IndentStatus.ORDER_PLACED,
         IndentStatus.PARTIALLY_RECEIVED,
         IndentStatus.FULLY_RECEIVED,
         IndentStatus.CLOSED,
-    ].includes(status);
+    ];
+    return orderStatuses.includes(status);
 }
 
 export default {

@@ -16,6 +16,8 @@ import receiptsRoutes from './modules/receipts/receipts.routes';
 import returnsRoutes from './modules/returns/returns.routes';
 import reportsRoutes from './modules/reports/reports.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
+import itemGroupsRoutes from './modules/itemGroups/itemGroups.routes';
+import uomRoutes from './modules/uom/uom.routes';
 
 export function createApp(): Application {
     const app = express();
@@ -54,6 +56,8 @@ export function createApp(): Application {
     app.use(`${apiPrefix}/users`, usersRoutes);
     app.use(`${apiPrefix}/sites`, sitesRoutes);
     app.use(`${apiPrefix}/materials`, materialsRoutes);
+    app.use(`${apiPrefix}/item-groups`, itemGroupsRoutes);
+    app.use(`${apiPrefix}/units-of-measure`, uomRoutes);
     app.use(`${apiPrefix}/indents`, indentsRoutes);
     app.use(`${apiPrefix}/orders`, ordersRoutes);
     app.use(`${apiPrefix}/receipts`, receiptsRoutes);

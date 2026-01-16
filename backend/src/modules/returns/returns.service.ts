@@ -143,7 +143,10 @@ class ReturnsService {
     async createReturn(data: CreateReturnDto, userId: string): Promise<unknown> {
         const damageReport = await prisma.damageReport.findUnique({
             where: { id: data.damageReportId },
-            include: { indentItem: { include: { indent: { include: { site: true } } } } },
+            include: {
+                indentItem: { include: { indent: { include: { site: true } } } },
+                return: true,
+            },
         });
 
         if (!damageReport) throw new NotFoundError('Damage report not found');

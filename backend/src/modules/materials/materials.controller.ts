@@ -4,11 +4,11 @@ import { materialsService } from './materials.service';
 class MaterialsController {
     async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { page, limit, category, search, isActive } = req.query;
+            const { page, limit, itemGroupId, search, isActive } = req.query;
             const result = await materialsService.findAll({
                 page: page ? parseInt(page as string, 10) : undefined,
                 limit: limit ? parseInt(limit as string, 10) : undefined,
-                category: category as string | undefined,
+                itemGroupId: itemGroupId as string | undefined,
                 search: search as string | undefined,
                 isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
             });
@@ -36,6 +36,15 @@ class MaterialsController {
         }
     }
 
+    async getUnits(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const units = await materialsService.getUnits();
+            res.json({ success: true, data: units });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async create(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const material = await materialsService.create(req.body);
@@ -48,3 +57,4 @@ class MaterialsController {
 
 export const materialsController = new MaterialsController();
 export default materialsController;
+

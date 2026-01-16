@@ -44,9 +44,10 @@ export function filterOrderForRole<T extends Record<string, unknown>>(
     }
 
     // Filter order items if present
-    if (Array.isArray(filtered.orderItems)) {
-        filtered.orderItems = (filtered.orderItems as Record<string, unknown>[]).map(
-            (item) => filterOrderItemForRole(item, role)
+    const orderItems = (filtered as { orderItems?: unknown }).orderItems;
+    if (Array.isArray(orderItems)) {
+        (filtered as Record<string, unknown>).orderItems = orderItems.map(
+            (item) => filterOrderItemForRole(item as Record<string, unknown>, role)
         );
     }
 

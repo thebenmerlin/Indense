@@ -88,11 +88,30 @@ export interface MaterialSpecifications {
     [key: string]: string[] | undefined;
 }
 
+// ItemGroup Response
+export interface ItemGroupResponse {
+    id: string;
+    name: string;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+// UnitOfMeasure Response
+export interface UnitOfMeasureResponse {
+    id: string;
+    code: string;
+    name: string;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 export interface CreateMaterialDto {
     name: string;
     code: string;
-    category: string;
-    unit: string;
+    itemGroupId: string;  // Foreign key to ItemGroup
+    unitId: string;       // Foreign key to UnitOfMeasure
     description?: string;
     specifications?: MaterialSpecifications;
 }
@@ -101,11 +120,14 @@ export interface MaterialResponse {
     id: string;
     name: string;
     code: string;
-    category: string;
-    unit: string;
+    itemGroupId: string;
+    unitId: string;
+    itemGroup?: ItemGroupResponse;  // Included when fetching with relations
+    unit?: UnitOfMeasureResponse;   // Included when fetching with relations
     description: string | null;
     specifications: MaterialSpecifications | null;
     isActive: boolean;
+    isSystemData: boolean;
 }
 
 // Indent DTOs

@@ -35,7 +35,7 @@ export async function createAuditLog(
                 entityId: data.entityId,
                 previousState: data.previousState,
                 newState: data.newState,
-                metadata: data.metadata,
+                metadata: data.metadata as object | undefined,
                 indentId: data.indentId,
                 ipAddress: req?.ip || req?.socket.remoteAddress,
                 userAgent: req?.headers['user-agent'],
