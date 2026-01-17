@@ -5,7 +5,7 @@ import { storage } from '../utils/storage';
 // For Android emulator: use 10.0.2.2 instead of localhost
 // For physical device: use your computer's local IP address
 const BASE_URL = __DEV__
-    ? 'http://10.0.2.2:3000/api/v1'  // Android emulator
+    ? 'http://192.168.0.105:3000/api/v1'  // Your local machine IP
     : 'https://api.yourapp.com/api/v1';
 
 // Create axios instance
