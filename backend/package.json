@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "render-build": "npx prisma generate && npx prisma migrate deploy && npm run build",
+    "render-build": "npm install --include=dev && npx prisma generate && npx prisma migrate deploy && npm run build",
     "start": "node dist/src/index.js",
     "lint": "eslint src --ext .ts",
     "test": "jest --passWithNoTests",
