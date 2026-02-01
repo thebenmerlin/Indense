@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "indense",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -32,10 +32,19 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-asset"
+      "expo-asset",
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f0e1bc51-4d44-47fb-844e-1e8a8bdde4b5"
+      }
+    },
+    "owner": "thebenmerlin"
   }
 }

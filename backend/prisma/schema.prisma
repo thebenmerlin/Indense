@@ -8,7 +8,8 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")  // Non-pooled connection for migrations
+  // directUrl is only needed for connection pooling services like Neon
+  // directUrl = env("DIRECT_URL")
 }
 
 // ============================================================================
@@ -51,6 +52,22 @@ enum ReturnStatus {
   REJECTED
 }
 
+enum DamageStatus {
+  DRAFT
+  REPORTED
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum SecurityQuestion {
+  MOTHERS_MAIDEN_NAME
+  FIRST_PET_NAME
+  CHILDHOOD_NICKNAME
+  FIRST_SCHOOL
+  FAVORITE_BOOK
+  BIRTHPLACE_CITY
+}
+
 // ============================================================================
 // USER & AUTHENTICATION
 // ============================================================================
@@ -58,14 +75,24 @@ enum ReturnStatus {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
+  phone        String?  @unique  // Phone number for login
   password     String
   name         String
+  dob          DateTime?          // Date of birth
   role         Role
   isActive     Boolean  @default(true)
   
-  // Site relationship - required for SITE_ENGINEER, null for PURCHASE_TEAM and DIRECTOR
-  siteId       String?
-  site         Site?    @relation(fields: [siteId], references: [id])
+  // Security question for password recovery
+  securityQuestion  SecurityQuestion?
+  securityAnswer    String?         // Hashed answer
+  
+  // Multi-site support for Site Engineers
+  // currentSiteId tracks the active site for session
+  currentSiteId     String?
+  currentSite       Site?    @relation("CurrentSite", fields: [currentSiteId], references: [id])
+  
+  // Theme preference
+  theme             String   @default("light")  // light or dark
   
   // Timestamps
   createdAt    DateTime @default(now())
@@ -73,6 +100,7 @@ model User {
   lastLoginAt  DateTime?
   
   // Relations
+  sites            UserSite[]      // Many-to-many with sites
   indents          Indent[]        @relation("IndentCreator")
   purchaseApprovals Indent[]       @relation("PurchaseApprover")
   directorApprovals Indent[]       @relation("DirectorApprover")
@@ -85,8 +113,9 @@ model User {
   refreshTokens    RefreshToken[]
   
   @@index([email])
+  @@index([phone])
   @@index([role])
-  @@index([siteId])
+  @@index([currentSiteId])
 }
 
 model RefreshToken {
@@ -118,11 +147,26 @@ model Site {
   updatedAt   DateTime @updatedAt
   
   // Relations
-  users       User[]
-  indents     Indent[]
+  users           UserSite[]     // Many-to-many with users
+  currentUsers    User[]         @relation("CurrentSite")  // Users with this as current site
+  indents         Indent[]
   
   @@index([code])
   @@index([isActive])
+}
+
+// Join table for User <-> Site many-to-many relationship
+model UserSite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, siteId])
+  @@index([userId])
+  @@index([siteId])
 }
 
 // ============================================================================
@@ -205,6 +249,8 @@ model Material {
 model Indent {
   id              String       @id @default(uuid())
   indentNumber    String       @unique  // Auto-generated: IND-SITE-YYYYMM-XXXX
+  name            String                // User-provided indent name
+  description     String?               // Optional description
   status          IndentStatus @default(SUBMITTED)
   
   // Site relationship
@@ -236,6 +282,7 @@ model Indent {
   priority        String    @default("NORMAL")  // LOW, NORMAL, HIGH, URGENT
   notes           String?
   requiredByDate  DateTime?
+  expectedDeliveryDate DateTime?        // Expected delivery date
   
   // Timestamps
   createdAt       DateTime  @default(now())
@@ -270,6 +317,14 @@ model IndentItem {
   requestedQty    Float
   receivedQty     Float    @default(0)
   pendingQty      Float    // Calculated: requestedQty - receivedQty
+  
+  // Urgent flag
+  isUrgent        Boolean  @default(false)  // True if material is needed urgently
+  
+  // Arrival status (for Site Engineer tracking after purchase)
+  // GREEN = arrived, YELLOW = partially arrived, RED = not arrived
+  arrivalStatus   String?  // null, "ARRIVED", "PARTIAL", "NOT_ARRIVED"
+  arrivalNotes    String?  // Notes for partial arrival
   
   // Specifications selected for this item
   specifications  Json?    // { "size": "Large", "color": "Red", "dimensions": "10x10" }
@@ -426,18 +481,24 @@ model ReceiptImage {
 model DamageReport {
   id              String   @id @default(uuid())
   
-  // Link to indent item
-  indentItemId    String
-  indentItem      IndentItem @relation(fields: [indentItemId], references: [id])
+  // Link to indent (for overview) and optionally a specific item
+  indentId        String              // Parent indent for easier querying
+  indentItemId    String?
+  indentItem      IndentItem? @relation(fields: [indentItemId], references: [id])
   
   // Reporter (Site Engineer)
   reportedById    String
   reportedBy      User     @relation("DamageReporter", fields: [reportedById], references: [id])
   
   // Damage details
-  damagedQty      Float
+  name            String              // User-provided name for this damage
+  damagedQty      Float?
   description     String
   severity        String   @default("MODERATE")  // MINOR, MODERATE, SEVERE
+  
+  // Status (draft vs reported)
+  status          DamageStatus @default(DRAFT)
+  submittedAt     DateTime?           // When damage was actually reported
   
   // Resolution
   isResolved      Boolean  @default(false)
@@ -451,7 +512,9 @@ model DamageReport {
   return          Return?
   images          DamageImage[]
   
+  @@index([indentId])
   @@index([indentItemId])
+  @@index([status])
   @@index([isResolved])
 }
 

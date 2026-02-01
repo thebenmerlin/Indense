@@ -1,14 +1,17 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
-import { validationResult, ValidationChain } from 'express-validator';
+import { validationResult, ValidationChain, ContextRunner } from 'express-validator';
 import { ValidationError } from '../utils/errors';
+
+// Type that accepts both ValidationChain and oneOf/anyOf results
+type ValidationMiddleware = ValidationChain | ContextRunner;
 
 /**
  * Middleware to run express-validator validations and handle errors
  */
-export function validateRequest(validations: ValidationChain[]): RequestHandler[] {
+export function validateRequest(validations: ValidationMiddleware[]): RequestHandler[] {
     return [
         // Run all validations
-        ...validations,
+        ...(validations as unknown as RequestHandler[]),
         // Check for errors
         (req: Request, _res: Response, next: NextFunction): void => {
             const errors = validationResult(req);
@@ -34,3 +37,4 @@ export function validateRequest(validations: ValidationChain[]): RequestHandler[
 }
 
 export default validateRequest;
+

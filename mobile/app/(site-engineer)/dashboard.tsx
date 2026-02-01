@@ -79,8 +79,8 @@ export default function SiteEngineerDashboard() {
                         {user?.role ? ROLE_NAMES[user.role] : 'Site Engineer'} • {user?.siteName || 'Site'}
                     </Text>
                 </View>
-                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                    <Ionicons name="log-out-outline" size={24} color="rgba(255,255,255,0.8)" />
+                <TouchableOpacity onPress={() => router.push('/(site-engineer)/account' as any)} style={styles.profileButton}>
+                    <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.9)" />
                 </TouchableOpacity>
             </View>
 
@@ -139,10 +139,8 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.8)',
         marginTop: 4,
     },
-    logoutButton: {
-        padding: 8,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 8,
+    profileButton: {
+        padding: 4,
     },
     section: {
         padding: 16,

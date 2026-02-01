@@ -47,7 +47,7 @@ export async function authenticate(
                 email: true,
                 name: true,
                 role: true,
-                siteId: true,
+                currentSiteId: true,
                 isActive: true,
             },
         });
@@ -66,7 +66,7 @@ export async function authenticate(
             email: user.email,
             name: user.name,
             role: user.role,
-            siteId: user.siteId,
+            siteId: user.currentSiteId,
         };
 
         req.user = authenticatedUser;

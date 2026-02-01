@@ -3,8 +3,9 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../../config/database';
 import { authConfig } from '../../config/auth';
-import { UnauthorizedError, BadRequestError } from '../../utils/errors';
+import { UnauthorizedError, BadRequestError, NotFoundError } from '../../utils/errors';
 import { JwtPayload, RefreshTokenPayload } from '../../types/express';
+import { Role, SecurityQuestion } from '@prisma/client';
 
 export interface LoginResult {
     accessToken: string;
@@ -12,14 +13,119 @@ export interface LoginResult {
     user: {
         id: string;
         email: string;
+        phone: string | null;
         name: string;
+        dob: Date | null;
         role: string;
-        siteId: string | null;
-        siteName?: string;
+        currentSiteId: string | null;
+        currentSiteName?: string;
+        sites: Array<{ id: string; name: string; code: string }>;
+        theme: string;
     };
 }
 
+export interface RegisterInput {
+    email: string;
+    phone?: string;
+    password: string;
+    name: string;
+    dob?: Date;
+    role: Role;
+    siteIds?: string[];  // Required for SITE_ENGINEER
+    securityQuestion: SecurityQuestion;
+    securityAnswer: string;
+}
+
 class AuthService {
+    /**
+     * Register a new user
+     */
+    async register(input: RegisterInput): Promise<LoginResult> {
+        // Check if email already exists
+        const existingEmail = await prisma.user.findUnique({
+            where: { email: input.email },
+        });
+        if (existingEmail) {
+            throw new BadRequestError('Email already in use');
+        }
+
+        // Check if phone already exists (if provided)
+        if (input.phone) {
+            const existingPhone = await prisma.user.findUnique({
+                where: { phone: input.phone },
+            });
+            if (existingPhone) {
+                throw new BadRequestError('Phone number already in use');
+            }
+        }
+
+        // For Site Engineers, siteIds are required
+        if (input.role === 'SITE_ENGINEER') {
+            if (!input.siteIds || input.siteIds.length === 0) {
+                throw new BadRequestError('Site selection is required for Site Engineers');
+            }
+            // Validate that all sites exist
+            const sites = await prisma.site.findMany({
+                where: { id: { in: input.siteIds }, isActive: true },
+            });
+            if (sites.length !== input.siteIds.length) {
+                throw new BadRequestError('One or more selected sites are invalid');
+            }
+        }
+
+        // Hash password and security answer
+        const hashedPassword = await bcrypt.hash(input.password, authConfig.bcrypt.saltRounds);
+        const hashedSecurityAnswer = await bcrypt.hash(
+            input.securityAnswer.toLowerCase().trim(),
+            authConfig.bcrypt.saltRounds
+        );
+
+        // Create user with site assignments
+        const user = await prisma.user.create({
+            data: {
+                email: input.email,
+                phone: input.phone || null,
+                password: hashedPassword,
+                name: input.name,
+                dob: input.dob || null,
+                role: input.role,
+                securityQuestion: input.securityQuestion,
+                securityAnswer: hashedSecurityAnswer,
+                currentSiteId: input.siteIds?.[0] || null,  // Set first site as current
+                sites: input.siteIds ? {
+                    create: input.siteIds.map(siteId => ({ siteId })),
+                } : undefined,
+            },
+            include: {
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
+                },
+            },
+        });
+
+        // Generate tokens
+        const accessToken = this.generateAccessToken(user);
+        const refreshToken = await this.generateRefreshToken(user.id);
+
+        return {
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                phone: user.phone,
+                name: user.name,
+                dob: user.dob,
+                role: user.role,
+                currentSiteId: user.currentSiteId,
+                currentSiteName: user.currentSite?.name,
+                sites: user.sites.map(us => us.site),
+                theme: user.theme,
+            },
+        };
+    }
+
     /**
      * Authenticate user with email and password
      */
@@ -28,8 +134,9 @@ class AuthService {
         const user = await prisma.user.findUnique({
             where: { email },
             include: {
-                site: {
-                    select: { name: true },
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
                 },
             },
         });
@@ -64,13 +171,178 @@ class AuthService {
             user: {
                 id: user.id,
                 email: user.email,
+                phone: user.phone,
                 name: user.name,
+                dob: user.dob,
                 role: user.role,
-                siteId: user.siteId,
-                siteName: user.site?.name,
+                currentSiteId: user.currentSiteId,
+                currentSiteName: user.currentSite?.name,
+                sites: user.sites.map(us => us.site),
+                theme: user.theme,
             },
         };
     }
+
+    /**
+     * Authenticate user with phone number and password
+     */
+    async loginWithPhone(phone: string, password: string): Promise<LoginResult> {
+        const user = await prisma.user.findUnique({
+            where: { phone },
+            include: {
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
+                },
+            },
+        });
+
+        if (!user) {
+            throw new UnauthorizedError('Invalid phone number or password');
+        }
+
+        if (!user.isActive) {
+            throw new UnauthorizedError('Account is deactivated');
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            throw new UnauthorizedError('Invalid phone number or password');
+        }
+
+        const accessToken = this.generateAccessToken(user);
+        const refreshToken = await this.generateRefreshToken(user.id);
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+        });
+
+        return {
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                phone: user.phone,
+                name: user.name,
+                dob: user.dob,
+                role: user.role,
+                currentSiteId: user.currentSiteId,
+                currentSiteName: user.currentSite?.name,
+                sites: user.sites.map(us => us.site),
+                theme: user.theme,
+            },
+        };
+    }
+
+    /**
+     * Get security question for password recovery
+     */
+    async getSecurityQuestion(emailOrPhone: string): Promise<{ userId: string; question: SecurityQuestion }> {
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [{ email: emailOrPhone }, { phone: emailOrPhone }],
+            },
+            select: { id: true, securityQuestion: true },
+        });
+
+        if (!user || !user.securityQuestion) {
+            throw new NotFoundError('User not found or no security question set');
+        }
+
+        return { userId: user.id, question: user.securityQuestion };
+    }
+
+    /**
+     * Verify security answer for password reset
+     */
+    async verifySecurityAnswer(userId: string, answer: string): Promise<{ resetToken: string }> {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { securityAnswer: true },
+        });
+
+        if (!user || !user.securityAnswer) {
+            throw new NotFoundError('User not found');
+        }
+
+        const isValid = await bcrypt.compare(answer.toLowerCase().trim(), user.securityAnswer);
+        if (!isValid) {
+            throw new BadRequestError('Incorrect security answer');
+        }
+
+        // Generate a short-lived reset token
+        const resetToken = jwt.sign(
+            { userId, purpose: 'password-reset' },
+            authConfig.jwt.secret,
+            { expiresIn: '15m' }
+        );
+
+        return { resetToken };
+    }
+
+    /**
+     * Reset password with reset token
+     */
+    async resetPassword(resetToken: string, newPassword: string): Promise<void> {
+        let payload: { userId: string; purpose: string };
+        try {
+            payload = jwt.verify(resetToken, authConfig.jwt.secret) as { userId: string; purpose: string };
+        } catch {
+            throw new UnauthorizedError('Invalid or expired reset token');
+        }
+
+        if (payload.purpose !== 'password-reset') {
+            throw new UnauthorizedError('Invalid token');
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, authConfig.bcrypt.saltRounds);
+
+        await prisma.user.update({
+            where: { id: payload.userId },
+            data: { password: hashedPassword },
+        });
+
+        // Invalidate all refresh tokens
+        await prisma.refreshToken.deleteMany({
+            where: { userId: payload.userId },
+        });
+    }
+
+    /**
+     * Switch current site for multi-site users
+     */
+    async switchSite(userId: string, siteId: string): Promise<{ currentSiteId: string; currentSiteName: string }> {
+        // Verify user has access to this site
+        const userSite = await prisma.userSite.findUnique({
+            where: { userId_siteId: { userId, siteId } },
+            include: { site: { select: { name: true } } },
+        });
+
+        if (!userSite) {
+            throw new BadRequestError('You do not have access to this site');
+        }
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: { currentSiteId: siteId },
+        });
+
+        return { currentSiteId: siteId, currentSiteName: userSite.site.name };
+    }
+
+    /**
+     * Update theme preference
+     */
+    async updateTheme(userId: string, theme: 'light' | 'dark'): Promise<void> {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { theme },
+        });
+    }
+
+
 
     /**
      * Refresh access token using refresh token
@@ -97,7 +369,7 @@ class AuthService {
                         email: true,
                         name: true,
                         role: true,
-                        siteId: true,
+                        currentSiteId: true,
                         isActive: true,
                     },
                 },
@@ -200,13 +472,13 @@ class AuthService {
         id: string;
         email: string;
         role: string;
-        siteId: string | null;
+        currentSiteId?: string | null;
     }): string {
         const payload: JwtPayload = {
             userId: user.id,
             email: user.email,
             role: user.role as JwtPayload['role'],
-            siteId: user.siteId,
+            siteId: user.currentSiteId ?? null,
         };
 
         return jwt.sign(payload, authConfig.jwt.secret, {

@@ -158,12 +158,15 @@ class IndentsService {
         const indent = await prisma.indent.create({
             data: {
                 indentNumber,
+                name: data.name,
+                description: data.description || null,
                 status: IndentStatus.SUBMITTED,
                 siteId,
                 createdById: userId,
                 priority: data.priority || 'NORMAL',
                 notes: data.notes,
                 requiredByDate: data.requiredByDate,
+                expectedDeliveryDate: data.expectedDeliveryDate,
                 items: {
                     create: data.items.map((item) => ({
                         materialId: item.materialId,
@@ -171,6 +174,7 @@ class IndentsService {
                         pendingQty: item.requestedQty,
                         specifications: item.specifications,
                         notes: item.notes,
+                        isUrgent: item.isUrgent || false,
                     })),
                 },
             },

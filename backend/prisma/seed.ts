@@ -88,7 +88,10 @@ async function main() {
                 password: hashedPassword,
                 name: 'Amit Patel',
                 role: Role.SITE_ENGINEER,
-                siteId: sites[0].id,
+                currentSiteId: sites[0].id,
+                sites: {
+                    create: [{ siteId: sites[0].id }],
+                },
             },
         }),
         prisma.user.upsert({
@@ -99,7 +102,10 @@ async function main() {
                 password: hashedPassword,
                 name: 'Sneha Reddy',
                 role: Role.SITE_ENGINEER,
-                siteId: sites[1].id,
+                currentSiteId: sites[1].id,
+                sites: {
+                    create: [{ siteId: sites[1].id }],
+                },
             },
         }),
     ]);

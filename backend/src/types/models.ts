@@ -136,12 +136,16 @@ export interface IndentItemInput {
     requestedQty: number;
     specifications?: Record<string, string>;
     notes?: string;
+    isUrgent?: boolean;   // Flag for urgent materials
 }
 
 export interface CreateIndentDto {
+    name: string;              // Required indent name
+    description?: string;      // Optional description
     priority?: string;
     notes?: string;
     requiredByDate?: Date;
+    expectedDeliveryDate?: Date;
     items: IndentItemInput[];
 }
 
@@ -205,10 +209,13 @@ export interface CreateReceiptDto {
 
 // Damage Report DTOs
 export interface CreateDamageReportDto {
-    indentItemId: string;
-    damagedQty: number;
+    indentId: string;          // Required parent indent
+    indentItemId?: string;     // Optional specific item
+    name: string;              // Name for the damage report
+    damagedQty?: number;
     description: string;
     severity?: string;
+    isDraft?: boolean;         // Save as draft
 }
 
 export interface ResolveDamageDto {

@@ -6,6 +6,13 @@ import { CreateUserDto, UpdateUserDto, UserResponse, PaginatedResult } from '../
 import { parsePaginationParams, buildPaginatedResult } from '../../utils/pagination';
 import { Role } from '@prisma/client';
 
+// Extended UserResponse to include multi-site support
+export interface ExtendedUserResponse extends Omit<UserResponse, 'siteId' | 'siteName'> {
+    currentSiteId: string | null;
+    currentSiteName?: string;
+    sites: Array<{ id: string; name: string; code: string }>;
+}
+
 class UsersService {
     /**
      * Get all users with pagination
@@ -16,21 +23,22 @@ class UsersService {
         role?: Role;
         siteId?: string;
         isActive?: boolean;
-    }): Promise<PaginatedResult<UserResponse>> {
+    }): Promise<PaginatedResult<ExtendedUserResponse>> {
         const { page, limit, role, siteId, isActive } = params;
         const pagination = parsePaginationParams({ page, limit });
 
         const where: Record<string, unknown> = {};
         if (role) where.role = role;
-        if (siteId) where.siteId = siteId;
+        if (siteId) where.sites = { some: { siteId } };
         if (typeof isActive === 'boolean') where.isActive = isActive;
 
         const [users, total] = await Promise.all([
             prisma.user.findMany({
                 where,
                 include: {
-                    site: {
-                        select: { name: true },
+                    currentSite: { select: { name: true } },
+                    sites: {
+                        include: { site: { select: { id: true, name: true, code: true } } },
                     },
                 },
                 skip: pagination.skip,
@@ -40,13 +48,14 @@ class UsersService {
             prisma.user.count({ where }),
         ]);
 
-        const mappedUsers: UserResponse[] = users.map((user) => ({
+        const mappedUsers: ExtendedUserResponse[] = users.map((user) => ({
             id: user.id,
             email: user.email,
             name: user.name,
             role: user.role,
-            siteId: user.siteId,
-            siteName: user.site?.name,
+            currentSiteId: user.currentSiteId,
+            currentSiteName: user.currentSite?.name,
+            sites: user.sites.map((us) => us.site),
             isActive: user.isActive,
             createdAt: user.createdAt,
             lastLoginAt: user.lastLoginAt,
@@ -58,12 +67,13 @@ class UsersService {
     /**
      * Get user by ID
      */
-    async findById(id: string): Promise<UserResponse> {
+    async findById(id: string): Promise<ExtendedUserResponse> {
         const user = await prisma.user.findUnique({
             where: { id },
             include: {
-                site: {
-                    select: { name: true },
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
                 },
             },
         });
@@ -77,8 +87,9 @@ class UsersService {
             email: user.email,
             name: user.name,
             role: user.role,
-            siteId: user.siteId,
-            siteName: user.site?.name,
+            currentSiteId: user.currentSiteId,
+            currentSiteName: user.currentSite?.name,
+            sites: user.sites.map((us) => us.site),
             isActive: user.isActive,
             createdAt: user.createdAt,
             lastLoginAt: user.lastLoginAt,
@@ -86,20 +97,15 @@ class UsersService {
     }
 
     /**
-     * Create new user
+     * Create new user (admin function, not self-registration)
      */
-    async create(data: CreateUserDto): Promise<UserResponse> {
+    async create(data: CreateUserDto): Promise<ExtendedUserResponse> {
         // Validate Site Engineer has siteId
         if (data.role === Role.SITE_ENGINEER && !data.siteId) {
             throw new BadRequestError('Site Engineer must be assigned to a site');
         }
 
-        // Validate Purchase Team and Director don't have siteId
-        if (data.role !== Role.SITE_ENGINEER && data.siteId) {
-            throw new BadRequestError('Purchase Team and Director cannot be assigned to a site');
-        }
-
-        // Check if site exists
+        // Check if site exists for Site Engineers
         if (data.siteId) {
             const site = await prisma.site.findUnique({ where: { id: data.siteId } });
             if (!site) {
@@ -116,11 +122,15 @@ class UsersService {
                 password: hashedPassword,
                 name: data.name,
                 role: data.role,
-                siteId: data.siteId || null,
+                currentSiteId: data.siteId || null,
+                sites: data.siteId ? {
+                    create: [{ siteId: data.siteId }],
+                } : undefined,
             },
             include: {
-                site: {
-                    select: { name: true },
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
                 },
             },
         });
@@ -130,8 +140,9 @@ class UsersService {
             email: user.email,
             name: user.name,
             role: user.role,
-            siteId: user.siteId,
-            siteName: user.site?.name,
+            currentSiteId: user.currentSiteId,
+            currentSiteName: user.currentSite?.name,
+            sites: user.sites.map((us) => us.site),
             isActive: user.isActive,
             createdAt: user.createdAt,
             lastLoginAt: user.lastLoginAt,
@@ -141,7 +152,7 @@ class UsersService {
     /**
      * Update user
      */
-    async update(id: string, data: UpdateUserDto): Promise<UserResponse> {
+    async update(id: string, data: UpdateUserDto): Promise<ExtendedUserResponse> {
         // Check user exists
         const existing = await prisma.user.findUnique({ where: { id } });
         if (!existing) {
@@ -152,8 +163,9 @@ class UsersService {
             where: { id },
             data,
             include: {
-                site: {
-                    select: { name: true },
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
                 },
             },
         });
@@ -163,8 +175,9 @@ class UsersService {
             email: user.email,
             name: user.name,
             role: user.role,
-            siteId: user.siteId,
-            siteName: user.site?.name,
+            currentSiteId: user.currentSiteId,
+            currentSiteName: user.currentSite?.name,
+            sites: user.sites.map((us) => us.site),
             isActive: user.isActive,
             createdAt: user.createdAt,
             lastLoginAt: user.lastLoginAt,
@@ -174,3 +187,4 @@ class UsersService {
 
 export const usersService = new UsersService();
 export default usersService;
+

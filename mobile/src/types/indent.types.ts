@@ -36,6 +36,16 @@ export interface MaterialSuggestion {
     categoryName: string;
 }
 
+/** Material created on-the-fly by Site Engineer */
+export interface CreateMaterialPayload {
+    name: string;
+    specification?: string;
+    dimensions?: string;
+    colour?: string;
+    categoryId: string;
+    unitId: string;
+}
+
 // =============================================================================
 // INDENT TYPES
 // =============================================================================
@@ -49,6 +59,9 @@ export interface IndentItem {
     pendingQty: number;
     specifications: Record<string, string> | null;
     notes: string | null;
+    isUrgent: boolean;
+    arrivalStatus: 'ARRIVED' | 'PARTIAL' | 'NOT_ARRIVED' | null;
+    arrivalNotes: string | null;
 }
 
 export interface Site {
@@ -63,10 +76,13 @@ export interface Site {
 export interface Indent {
     id: string;
     indentNumber: string;
+    name: string;
+    description: string | null;
     status: IndentStatus;
     priority: Priority;
     notes: string | null;
     requiredByDate: string | null;
+    expectedDeliveryDate: string | null;
     site: Site;
     createdBy: { id: string; name: string };
     createdAt: string;
@@ -76,9 +92,17 @@ export interface Indent {
     directorApprovedBy?: { name: string } | null;
     directorApprovedAt?: string | null;
     rejectionReason?: string | null;
+    order?: {
+        vendorName?: string;
+        vendorContact?: string;
+        status: string;
+    } | null;
 }
 
 export interface CreateIndentPayload {
+    name: string;
+    description?: string;
+    expectedDeliveryDate?: string;
     priority?: Priority;
     notes?: string;
     requiredByDate?: string;
@@ -87,5 +111,7 @@ export interface CreateIndentPayload {
         requestedQty: number;
         specifications?: Record<string, string>;
         notes?: string;
+        isUrgent?: boolean;
     }[];
 }
+

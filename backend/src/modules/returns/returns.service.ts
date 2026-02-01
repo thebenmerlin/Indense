@@ -65,20 +65,34 @@ class ReturnsService {
     }
 
     async createDamageReport(data: CreateDamageReportDto, userId: string): Promise<unknown> {
-        const indentItem = await prisma.indentItem.findUnique({
-            where: { id: data.indentItemId },
-            include: { indent: { include: { site: true } } },
+        // Validate indent exists
+        const indent = await prisma.indent.findUnique({
+            where: { id: data.indentId },
+            include: { site: true },
         });
+        if (!indent) throw new NotFoundError('Indent not found');
 
-        if (!indentItem) throw new NotFoundError('Indent item not found');
+        // Optionally validate indent item if provided
+        if (data.indentItemId) {
+            const indentItem = await prisma.indentItem.findUnique({
+                where: { id: data.indentItemId },
+            });
+            if (!indentItem || indentItem.indentId !== data.indentId) {
+                throw new BadRequestError('Indent item does not belong to this indent');
+            }
+        }
 
         const report = await prisma.damageReport.create({
             data: {
-                indentItemId: data.indentItemId,
+                indentId: data.indentId,
+                indentItemId: data.indentItemId || null,
                 reportedById: userId,
-                damagedQty: data.damagedQty,
+                name: data.name,
+                damagedQty: data.damagedQty || null,
                 description: data.description,
                 severity: data.severity || 'MODERATE',
+                status: data.isDraft ? 'DRAFT' : 'REPORTED',
+                submittedAt: data.isDraft ? null : new Date(),
             },
             include: { indentItem: { include: { material: true } } },
         });
@@ -87,7 +101,7 @@ class ReturnsService {
             action: AuditAction.DAMAGE_REPORTED,
             entityType: EntityType.DAMAGE_REPORT,
             entityId: report.id,
-            indentId: indentItem.indentId,
+            indentId: data.indentId,
         });
 
         return report;
@@ -152,9 +166,23 @@ class ReturnsService {
         if (!damageReport) throw new NotFoundError('Damage report not found');
         if (damageReport.return) throw new BadRequestError('Return already exists for this damage');
 
-        const returnNumber = await this.generateReturnNumber(
-            damageReport.indentItem.indent.site.code
-        );
+        // Get site code from indent (via indentItem if exists, or directly from indent)
+        let siteCode: string;
+        if (damageReport.indentItem) {
+            siteCode = damageReport.indentItem.indent.site.code;
+        } else {
+            // Fallback to getting site from indent directly
+            const indent = await prisma.indent.findUnique({
+                where: { id: damageReport.indentId },
+                include: { site: true },
+            });
+            if (!indent) throw new NotFoundError('Indent not found');
+            siteCode = indent.site.code;
+        }
+
+        const returnNumber = await this.generateReturnNumber(siteCode);
+
+        const indentId = damageReport.indentItem?.indentId || damageReport.indentId;
 
         const returnRecord = await prisma.return.create({
             data: {
@@ -170,7 +198,7 @@ class ReturnsService {
             action: AuditAction.RETURN_CREATED,
             entityType: EntityType.RETURN,
             entityId: returnRecord.id,
-            indentId: damageReport.indentItem.indentId,
+            indentId,
         });
 
         return returnRecord;

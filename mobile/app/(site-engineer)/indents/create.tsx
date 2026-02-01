@@ -8,11 +8,15 @@ import {
     TouchableOpacity,
     Alert,
     ActivityIndicator,
+    Platform,
+    Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { materialsApi, indentsApi } from '../../../src/api';
 import { MaterialSuggestion, CreateIndentPayload } from '../../../src/types';
+import AddMaterialModal, { NewMaterialData } from '../../../src/components/AddMaterialModal';
 
 const theme = {
     colors: {
@@ -24,6 +28,7 @@ const theme = {
         border: '#D1D5DB',
         error: '#EF4444',
         success: '#10B981',
+        warning: '#F59E0B',
         highlight: '#EFF6FF',
     }
 };
@@ -35,17 +40,32 @@ interface IndentItemData {
     unitCode: string;
     unitName: string;
     categoryName: string;
-    requestedQty: string;
+    requestedQty: number;
     notes: string;
+    isUrgent: boolean;
+    isNewMaterial: boolean; // True if created via Add Material popup
+    specification?: string;
+    dimensions?: string;
+    colour?: string;
+    categoryId?: string;
+    unitId?: string;
 }
 
 export default function CreateIndent() {
+    // Indent details
+    const [indentName, setIndentName] = useState('');
+    const [description, setDescription] = useState('');
+    const [expectedDate, setExpectedDate] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+
+    // Materials
     const [suggestions, setSuggestions] = useState<MaterialSuggestion[]>([]);
     const [searching, setSearching] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [notes, setNotes] = useState('');
     const [items, setItems] = useState<IndentItemData[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
+
     const router = useRouter();
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -53,18 +73,15 @@ export default function CreateIndent() {
     const handleSearch = useCallback((query: string) => {
         setSearchQuery(query);
 
-        // Clear previous timeout
         if (searchTimeoutRef.current) {
             clearTimeout(searchTimeoutRef.current);
         }
 
-        // Don't search if less than 2 characters
         if (query.length < 2) {
             setSuggestions([]);
             return;
         }
 
-        // Debounce: wait 300ms before searching
         searchTimeoutRef.current = setTimeout(async () => {
             setSearching(true);
             try {
@@ -79,7 +96,7 @@ export default function CreateIndent() {
         }, 300);
     }, []);
 
-    const addItem = (material: MaterialSuggestion) => {
+    const addItemFromSearch = (material: MaterialSuggestion) => {
         if (items.find(i => i.materialId === material.id)) {
             Alert.alert('Already Added', 'This material is already in your indent');
             return;
@@ -91,45 +108,98 @@ export default function CreateIndent() {
             unitCode: material.unitCode,
             unitName: material.unitName,
             categoryName: material.categoryName,
-            requestedQty: '',
+            requestedQty: 1,
             notes: '',
+            isUrgent: false,
+            isNewMaterial: false,
         }]);
         setSearchQuery('');
         setSuggestions([]);
+    };
+
+    const addNewMaterial = (material: NewMaterialData) => {
+        setItems([...items, {
+            materialId: material.id,
+            materialName: material.name,
+            materialCode: '',
+            unitCode: material.unitCode,
+            unitName: material.unitName,
+            categoryName: material.categoryName,
+            requestedQty: 1,
+            notes: '',
+            isUrgent: material.isUrgent,
+            isNewMaterial: true,
+            specification: material.specification,
+            dimensions: material.dimensions,
+            colour: material.colour,
+            categoryId: material.categoryId,
+            unitId: material.unitId,
+        }]);
     };
 
     const removeItem = (materialId: string) => {
         setItems(items.filter(i => i.materialId !== materialId));
     };
 
-    const updateItemQty = (materialId: string, qty: string) => {
+    const updateItemQty = (materialId: string, delta: number) => {
+        setItems(items.map(i => {
+            if (i.materialId === materialId) {
+                const newQty = Math.max(1, i.requestedQty + delta);
+                return { ...i, requestedQty: newQty };
+            }
+            return i;
+        }));
+    };
+
+    const toggleUrgent = (materialId: string) => {
         setItems(items.map(i =>
-            i.materialId === materialId ? { ...i, requestedQty: qty } : i
+            i.materialId === materialId ? { ...i, isUrgent: !i.isUrgent } : i
         ));
     };
 
+    const handleDateChange = (event: any, selectedDate?: Date) => {
+        setShowDatePicker(Platform.OS === 'ios');
+        if (selectedDate) {
+            setExpectedDate(selectedDate);
+        }
+    };
+
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
+    };
+
     const handleSubmit = async () => {
-        if (items.length === 0) {
-            Alert.alert('No Items', 'Please add at least one material');
+        if (!indentName.trim()) {
+            Alert.alert('Required', 'Please enter an indent name');
             return;
         }
 
-        const invalidItems = items.filter(
-            i => !i.requestedQty || parseFloat(i.requestedQty) <= 0
-        );
-        if (invalidItems.length > 0) {
-            Alert.alert('Invalid Quantity', 'Please enter valid quantities for all items');
+        if (items.length === 0) {
+            Alert.alert('No Items', 'Please add at least one material');
             return;
         }
 
         setSubmitting(true);
         try {
             const payload: CreateIndentPayload = {
-                notes: notes || undefined,
+                name: indentName.trim(),
+                description: description.trim() || undefined,
+                expectedDeliveryDate: expectedDate.toISOString(),
                 items: items.map(i => ({
                     materialId: i.materialId,
-                    requestedQty: parseFloat(i.requestedQty),
+                    requestedQty: i.requestedQty,
                     notes: i.notes || undefined,
+                    isUrgent: i.isUrgent,
+                    // For new materials, we'll need to include specs
+                    specifications: i.isNewMaterial ? {
+                        specification: i.specification || '',
+                        dimensions: i.dimensions || '',
+                        colour: i.colour || '',
+                    } : undefined,
                 })),
             };
 
@@ -146,13 +216,70 @@ export default function CreateIndent() {
 
     return (
         <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+            {/* Indent Details Section */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Search Materials</Text>
+                <Text style={styles.sectionTitle}>Indent Details</Text>
+
+                {/* Indent Name */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Indent Name *</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g., Foundation Materials - Block A"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={indentName}
+                        onChangeText={setIndentName}
+                    />
+                </View>
+
+                {/* Description */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Description</Text>
+                    <TextInput
+                        style={[styles.input, styles.textArea]}
+                        placeholder="Add any details or notes..."
+                        placeholderTextColor={theme.colors.textSecondary}
+                        multiline
+                        numberOfLines={3}
+                        value={description}
+                        onChangeText={setDescription}
+                    />
+                </View>
+
+                {/* Expected Delivery Date */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Expected Delivery Date</Text>
+                    <TouchableOpacity
+                        style={styles.dateButton}
+                        onPress={() => setShowDatePicker(true)}
+                    >
+                        <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                        <Text style={styles.dateText}>{formatDate(expectedDate)}</Text>
+                        <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+
+                {showDatePicker && (
+                    <DateTimePicker
+                        value={expectedDate}
+                        mode="date"
+                        display="default"
+                        minimumDate={new Date()}
+                        onChange={handleDateChange}
+                    />
+                )}
+            </View>
+
+            {/* Add Materials Section */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Add Materials</Text>
+
+                {/* Search Bar */}
                 <View style={styles.searchContainer}>
                     <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Type material name (min 2 chars)..."
+                        placeholder="Search existing materials..."
                         placeholderTextColor={theme.colors.textSecondary}
                         value={searchQuery}
                         onChangeText={handleSearch}
@@ -162,17 +289,24 @@ export default function CreateIndent() {
                         <ActivityIndicator size="small" color={theme.colors.primary} style={styles.searchSpinner} />
                     )}
                 </View>
-                <Text style={styles.hintText}>
-                    💡 Start typing to search from 3,800+ materials
-                </Text>
 
+                {/* Add Material Button */}
+                <TouchableOpacity
+                    style={styles.addMaterialButton}
+                    onPress={() => setShowAddMaterialModal(true)}
+                >
+                    <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
+                    <Text style={styles.addMaterialText}>Add New Material</Text>
+                </TouchableOpacity>
+
+                {/* Search Results */}
                 {suggestions.length > 0 && (
                     <View style={styles.searchResults}>
                         {suggestions.map(material => (
                             <TouchableOpacity
                                 key={material.id}
                                 style={styles.searchItem}
-                                onPress={() => addItem(material)}
+                                onPress={() => addItemFromSearch(material)}
                             >
                                 <View style={styles.searchItemContent}>
                                     <Text style={styles.materialName} numberOfLines={2}>{material.name}</Text>
@@ -191,16 +325,28 @@ export default function CreateIndent() {
                 )}
             </View>
 
+            {/* Selected Items */}
             {items.length > 0 && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Selected Items ({items.length})</Text>
+                    <Text style={styles.sectionTitle}>Selected Materials ({items.length})</Text>
                     {items.map(item => (
-                        <View key={item.materialId} style={styles.itemCard}>
+                        <View key={item.materialId} style={[styles.itemCard, item.isUrgent && styles.urgentCard]}>
                             <View style={styles.itemHeader}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.materialName} numberOfLines={2}>{item.materialName}</Text>
+                                    <View style={styles.nameRow}>
+                                        <Text style={styles.materialName} numberOfLines={2}>{item.materialName}</Text>
+                                        {item.isUrgent && (
+                                            <View style={styles.urgentBadge}>
+                                                <Text style={styles.urgentBadgeText}>URGENT</Text>
+                                            </View>
+                                        )}
+                                    </View>
                                     <View style={styles.materialMeta}>
-                                        <Text style={styles.materialCode}>{item.materialCode}</Text>
+                                        {item.materialCode ? (
+                                            <Text style={styles.materialCode}>{item.materialCode}</Text>
+                                        ) : (
+                                            <Text style={styles.newMaterialTag}>New Material</Text>
+                                        )}
                                         <View style={styles.badge}>
                                             <Text style={styles.badgeText}>{item.categoryName}</Text>
                                         </View>
@@ -213,15 +359,35 @@ export default function CreateIndent() {
                                     <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
                                 </TouchableOpacity>
                             </View>
+
+                            {/* Quantity Controls */}
                             <View style={styles.qtyRow}>
                                 <Text style={styles.qtyLabel}>Quantity ({item.unitName}):</Text>
-                                <TextInput
-                                    style={styles.qtyInput}
-                                    placeholder="Enter qty"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    keyboardType="numeric"
-                                    value={item.requestedQty}
-                                    onChangeText={(v) => updateItemQty(item.materialId, v)}
+                                <View style={styles.qtyControls}>
+                                    <TouchableOpacity
+                                        style={styles.qtyButton}
+                                        onPress={() => updateItemQty(item.materialId, -1)}
+                                    >
+                                        <Ionicons name="remove" size={20} color={theme.colors.primary} />
+                                    </TouchableOpacity>
+                                    <Text style={styles.qtyValue}>{item.requestedQty}</Text>
+                                    <TouchableOpacity
+                                        style={styles.qtyButton}
+                                        onPress={() => updateItemQty(item.materialId, 1)}
+                                    >
+                                        <Ionicons name="add" size={20} color={theme.colors.primary} />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {/* Urgent Toggle */}
+                            <View style={styles.urgentToggleRow}>
+                                <Text style={styles.urgentToggleLabel}>Mark as Urgent</Text>
+                                <Switch
+                                    value={item.isUrgent}
+                                    onValueChange={() => toggleUrgent(item.materialId)}
+                                    trackColor={{ false: '#D1D5DB', true: '#FCD34D' }}
+                                    thumbColor={item.isUrgent ? theme.colors.warning : '#f4f3f4'}
                                 />
                             </View>
                         </View>
@@ -229,35 +395,30 @@ export default function CreateIndent() {
                 </View>
             )}
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Notes (Optional)</Text>
-                <TextInput
-                    style={styles.notesInput}
-                    placeholder="Add any notes or special instructions..."
-                    placeholderTextColor={theme.colors.textSecondary}
-                    multiline
-                    numberOfLines={3}
-                    value={notes}
-                    onChangeText={setNotes}
-                />
-            </View>
-
+            {/* Submit Button */}
             <TouchableOpacity
-                style={[styles.submitButton, (submitting || items.length === 0) && styles.submitButtonDisabled]}
+                style={[styles.submitButton, (submitting || items.length === 0 || !indentName.trim()) && styles.submitButtonDisabled]}
                 onPress={handleSubmit}
-                disabled={submitting || items.length === 0}
+                disabled={submitting || items.length === 0 || !indentName.trim()}
             >
                 {submitting ? (
                     <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                     <>
                         <Ionicons name="paper-plane" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                        <Text style={styles.submitButtonText}>Submit Indent</Text>
+                        <Text style={styles.submitButtonText}>Create Indent</Text>
                     </>
                 )}
             </TouchableOpacity>
 
             <View style={{ height: 40 }} />
+
+            {/* Add Material Modal */}
+            <AddMaterialModal
+                visible={showAddMaterialModal}
+                onClose={() => setShowAddMaterialModal(false)}
+                onAdd={addNewMaterial}
+            />
         </ScrollView>
     );
 }
@@ -276,6 +437,45 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
         marginBottom: 12,
     },
+    inputGroup: {
+        marginBottom: 16,
+    },
+    label: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textPrimary,
+        marginBottom: 8,
+    },
+    input: {
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 16,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        color: theme.colors.textPrimary,
+    },
+    textArea: {
+        minHeight: 80,
+        textAlignVertical: 'top',
+    },
+    dateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    dateText: {
+        flex: 1,
+        fontSize: 16,
+        color: theme.colors.textPrimary,
+        marginLeft: 10,
+    },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -284,6 +484,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         borderWidth: 1,
         borderColor: theme.colors.border,
+        marginBottom: 12,
     },
     searchIcon: {
         marginRight: 8,
@@ -297,10 +498,22 @@ const styles = StyleSheet.create({
     searchSpinner: {
         marginLeft: 8,
     },
-    hintText: {
-        fontSize: 13,
-        color: theme.colors.textSecondary,
-        marginTop: 8,
+    addMaterialButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.highlight,
+        borderRadius: 10,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+        borderStyle: 'dashed',
+    },
+    addMaterialText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.primary,
+        marginLeft: 8,
     },
     searchResults: {
         marginTop: 12,
@@ -355,6 +568,11 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         fontWeight: '500',
     },
+    newMaterialTag: {
+        fontSize: 12,
+        color: theme.colors.success,
+        fontWeight: '600',
+    },
     itemCard: {
         backgroundColor: theme.colors.cardBg,
         borderRadius: 12,
@@ -363,11 +581,32 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
+    urgentCard: {
+        borderColor: theme.colors.warning,
+        borderWidth: 2,
+    },
     itemHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 12,
+    },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    urgentBadge: {
+        backgroundColor: theme.colors.warning,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    urgentBadgeText: {
+        fontSize: 10,
+        color: '#FFFFFF',
+        fontWeight: '700',
     },
     removeButton: {
         padding: 4,
@@ -375,32 +614,42 @@ const styles = StyleSheet.create({
     qtyRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
     },
     qtyLabel: {
         fontSize: 14,
         color: theme.colors.textSecondary,
-        marginRight: 12,
     },
-    qtyInput: {
-        flex: 1,
+    qtyControls: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: theme.colors.surface,
         borderRadius: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        fontSize: 16,
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
-    notesInput: {
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        minHeight: 100,
-        textAlignVertical: 'top',
+    qtyButton: {
+        padding: 10,
+    },
+    qtyValue: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.textPrimary,
+        minWidth: 40,
+        textAlign: 'center',
+    },
+    urgentToggleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    urgentToggleLabel: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
     },
     submitButton: {
         backgroundColor: theme.colors.primary,
