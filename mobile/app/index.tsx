@@ -9,6 +9,8 @@ import {
     ActivityIndicator,
     SafeAreaView,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 
 const API_URL = 'https://indense.onrender.com/api/v1';
 
@@ -16,8 +18,7 @@ export default function Index() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [loggedIn, setLoggedIn] = useState(false);
-    const [userData, setUserData] = useState<any>(null);
+    const router = useRouter();
 
     const handleLogin = async () => {
         if (!email.trim() || !password) {
@@ -39,9 +40,27 @@ export default function Index() {
             const data = await response.json();
 
             if (response.ok) {
-                setUserData(data.data.user);
-                setLoggedIn(true);
-                Alert.alert('Success', `Welcome, ${data.data.user.name}!`);
+                const { user, accessToken, refreshToken } = data.data;
+
+                // Store auth data
+                try {
+                    await SecureStore.setItemAsync('auth_access_token', accessToken);
+                    await SecureStore.setItemAsync('auth_refresh_token', refreshToken);
+                    await SecureStore.setItemAsync('auth_user', JSON.stringify(user));
+                } catch (e) {
+                    console.warn('Storage error:', e);
+                }
+
+                // Navigate based on role
+                if (user.role === 'SITE_ENGINEER') {
+                    router.replace('/(site-engineer)/dashboard');
+                } else if (user.role === 'PURCHASE_TEAM') {
+                    router.replace('/(purchase-team)/dashboard');
+                } else if (user.role === 'DIRECTOR') {
+                    router.replace('/(director)/dashboard');
+                } else {
+                    Alert.alert('Success', `Logged in as ${user.role}`);
+                }
             } else {
                 Alert.alert('Login Failed', data.error || 'Invalid credentials');
             }
@@ -51,30 +70,6 @@ export default function Index() {
             setLoading(false);
         }
     };
-
-    if (loggedIn && userData) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.card}>
-                    <Text style={styles.welcomeText}>Welcome!</Text>
-                    <Text style={styles.userName}>{userData.name}</Text>
-                    <Text style={styles.userRole}>{userData.role}</Text>
-                    <Text style={styles.userEmail}>{userData.email}</Text>
-                    <TouchableOpacity
-                        style={[styles.button, { backgroundColor: '#EF4444' }]}
-                        onPress={() => {
-                            setLoggedIn(false);
-                            setUserData(null);
-                            setEmail('');
-                            setPassword('');
-                        }}
-                    >
-                        <Text style={styles.buttonText}>Logout</Text>
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
-        );
-    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -185,28 +180,5 @@ const styles = StyleSheet.create({
         marginTop: 16,
         fontSize: 12,
         color: '#9CA3AF',
-    },
-    welcomeText: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#10B981',
-        marginBottom: 8,
-    },
-    userName: {
-        fontSize: 22,
-        fontWeight: '600',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    userRole: {
-        fontSize: 16,
-        color: '#3B82F6',
-        fontWeight: '500',
-        marginBottom: 4,
-    },
-    userEmail: {
-        fontSize: 14,
-        color: '#6B7280',
-        marginBottom: 24,
     },
 });
