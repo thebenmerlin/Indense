@@ -35,19 +35,23 @@ const processQueue = (error: Error | null, token: string | null = null) => {
     failedQueue = [];
 };
 
-// Request interceptor - add auth token
+// Request interceptor - add auth token (with try-catch for safety)
 apiClient.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
-        const token = await storage.getAccessToken();
-        if (token && config.headers) {
-            config.headers.Authorization = `Bearer ${token}`;
+        try {
+            const token = await storage.getAccessToken();
+            if (token && config.headers) {
+                config.headers.Authorization = `Bearer ${token}`;
+            }
+        } catch (error) {
+            console.warn('Failed to get access token for request:', error);
         }
         return config;
     },
     (error) => Promise.reject(error)
 );
 
-// Response interceptor - handle token refresh
+// Response interceptor - handle token refresh (with try-catch for safety)
 apiClient.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
@@ -90,7 +94,11 @@ apiClient.interceptors.response.use(
                 return apiClient(originalRequest);
             } catch (refreshError) {
                 processQueue(refreshError as Error, null);
-                await storage.clearAuth();
+                try {
+                    await storage.clearAuth();
+                } catch (clearError) {
+                    console.warn('Failed to clear auth:', clearError);
+                }
                 return Promise.reject(refreshError);
             } finally {
                 isRefreshing = false;
