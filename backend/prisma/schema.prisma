@@ -38,10 +38,18 @@ enum NotificationType {
   INDENT_PURCHASE_APPROVED
   INDENT_DIRECTOR_APPROVED
   INDENT_REJECTED
+  INDENT_ON_HOLD
+  INDENT_URGENT
+  INDENT_CLOSED
   ORDER_PLACED
   ORDER_UPDATED
   MATERIAL_RECEIVED
   DAMAGE_REPORTED
+  DAMAGE_REPAIRED
+  PARTIAL_RECEIVED
+  PARTIAL_REORDERED
+  SITE_ASSIGNED
+  USER_REGISTERED
   RETURN_RAISED
 }
 
@@ -93,6 +101,9 @@ model User {
   
   // Theme preference
   theme             String   @default("light")  // light or dark
+  
+  // Push notification token (Expo)
+  pushToken         String?
   
   // Timestamps
   createdAt    DateTime @default(now())

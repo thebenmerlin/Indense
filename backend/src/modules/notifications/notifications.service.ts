@@ -1,15 +1,17 @@
 import { NotificationType, Role } from '@prisma/client';
 import { prisma } from '../../config/database';
-import { NotificationData, notificationTemplates } from './notifications.types';
+import { NotificationData, notificationTemplates, getDeepLinkScreen } from './notifications.types';
 import { PaginatedResult } from '../../types';
 import { parsePaginationParams, buildPaginatedResult } from '../../utils/pagination';
+import { sendPushNotification, sendPushNotifications, buildNotificationData } from '../../utils/pushNotifications';
 
 class NotificationsService {
     /**
-     * Create a notification for a user
+     * Create a notification for a user and send push notification
      */
     async create(data: NotificationData): Promise<unknown> {
-        return prisma.notification.create({
+        // Create in database
+        const notification = await prisma.notification.create({
             data: {
                 type: data.type,
                 userId: data.userId,
@@ -19,14 +21,36 @@ class NotificationsService {
                 data: data.data as object | undefined,
             },
         });
+
+        // Send push notification
+        const user = await prisma.user.findUnique({
+            where: { id: data.userId },
+            select: { pushToken: true, role: true },
+        });
+
+        if (user?.pushToken) {
+            const deepLinkData = buildNotificationData(
+                data.type,
+                data.indentId,
+                {
+                    screen: getDeepLinkScreen(data.type, user.role),
+                    notificationId: notification.id,
+                    ...data.data,
+                }
+            );
+            await sendPushNotification(user.pushToken, data.title, data.message, deepLinkData);
+        }
+
+        return notification;
     }
 
     /**
-     * Create notifications for multiple users
+     * Create notifications for multiple users and send push notifications
      */
     async createMany(type: NotificationType, userIds: string[], indentId?: string, customMessage?: string): Promise<void> {
         const template = notificationTemplates[type];
 
+        // Create in database
         await prisma.notification.createMany({
             data: userIds.map((userId) => ({
                 type,
@@ -36,6 +60,19 @@ class NotificationsService {
                 indentId,
             })),
         });
+
+        // Fetch push tokens for users
+        const users = await prisma.user.findMany({
+            where: { id: { in: userIds }, pushToken: { not: null } },
+            select: { pushToken: true },
+        });
+
+        const tokens = users.map(u => u.pushToken).filter((t): t is string => !!t);
+
+        if (tokens.length > 0) {
+            const deepLinkData = buildNotificationData(type, indentId);
+            await sendPushNotifications(tokens, template.title, customMessage || template.message, deepLinkData);
+        }
     }
 
     /**
@@ -72,6 +109,26 @@ class NotificationsService {
     }
 
     /**
+     * Register a push token for a user
+     */
+    async registerPushToken(userId: string, pushToken: string): Promise<void> {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { pushToken },
+        });
+    }
+
+    /**
+     * Unregister push token for a user
+     */
+    async unregisterPushToken(userId: string): Promise<void> {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { pushToken: null },
+        });
+    }
+
+    /**
      * Get notifications for a user
      */
     async findByUserId(
@@ -88,6 +145,15 @@ class NotificationsService {
                 orderBy: { createdAt: 'desc' },
                 skip: pag.skip,
                 take: pag.take,
+                include: {
+                    indent: {
+                        select: {
+                            id: true,
+                            indentNumber: true,
+                            name: true,
+                        },
+                    },
+                },
             }),
             prisma.notification.count({ where }),
         ]);

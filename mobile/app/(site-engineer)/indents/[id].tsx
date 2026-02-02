@@ -268,6 +268,17 @@ export default function IndentDetails() {
                             </View>
                         </View>
 
+                        {/* Reordered Badge - for partially received items that have been reordered */}
+                        {item.isReordered && (
+                            <View style={styles.reorderedBadge}>
+                                <Ionicons name="refresh-circle" size={16} color="#059669" />
+                                <Text style={styles.reorderedText}>Reordered</Text>
+                                {item.reorderVendorName && (
+                                    <Text style={styles.reorderVendor}>• {item.reorderVendorName}</Text>
+                                )}
+                            </View>
+                        )}
+
                         {/* Arrival Checkboxes - only for purchased indents */}
                         {isPurchased && (
                             <>
@@ -596,6 +607,25 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: theme.colors.textPrimary,
+    },
+    reorderedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ECFDF5',
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 6,
+        marginTop: 10,
+        gap: 6,
+    },
+    reorderedText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#059669',
+    },
+    reorderVendor: {
+        fontSize: 12,
+        color: '#047857',
     },
     arrivalSection: {
         flexDirection: 'row',

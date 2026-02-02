@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store';
 import { ROLE_NAMES } from '../../src/constants';
 import { indentsApi } from '../../src/api';
+import NotificationCenter from '../../src/components/NotificationCenter';
 
 const theme = {
     colors: {
@@ -131,12 +132,15 @@ export default function PurchaseTeamDashboard() {
                             {user?.role ? ROLE_NAMES[user.role] : 'Purchase Team'}
                         </Text>
                     </View>
-                    <TouchableOpacity
-                        onPress={() => router.push('/(purchase-team)/account' as any)}
-                        style={styles.profileButton}
-                    >
-                        <Ionicons name="person-circle" size={40} color="rgba(255,255,255,0.9)" />
-                    </TouchableOpacity>
+                    <View style={styles.headerActions}>
+                        <NotificationCenter primaryColor={theme.colors.primary} />
+                        <TouchableOpacity
+                            onPress={() => router.push('/(purchase-team)/account' as any)}
+                            style={styles.profileButton}
+                        >
+                            <Ionicons name="person-circle" size={40} color="rgba(255,255,255,0.9)" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
 
@@ -183,6 +187,10 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: 'rgba(255,255,255,0.8)',
         marginTop: 4,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     profileButton: {
         padding: 4,

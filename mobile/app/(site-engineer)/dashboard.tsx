@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store';
 import { Role, ROLE_NAMES } from '../../src/constants';
+import NotificationCenter from '../../src/components/NotificationCenter';
 
 const theme = {
     colors: {
@@ -79,9 +80,12 @@ export default function SiteEngineerDashboard() {
                         {user?.role ? ROLE_NAMES[user.role] : 'Site Engineer'} • {user?.siteName || 'Site'}
                     </Text>
                 </View>
-                <TouchableOpacity onPress={() => router.push('/(site-engineer)/account' as any)} style={styles.profileButton}>
-                    <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.9)" />
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <NotificationCenter primaryColor={theme.colors.primary} />
+                    <TouchableOpacity onPress={() => router.push('/(site-engineer)/account' as any)} style={styles.profileButton}>
+                        <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.9)" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={styles.section}>
@@ -138,6 +142,10 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: 'rgba(255,255,255,0.8)',
         marginTop: 4,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     profileButton: {
         padding: 4,

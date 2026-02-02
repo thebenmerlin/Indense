@@ -62,6 +62,11 @@ export interface IndentItem {
     isUrgent: boolean;
     arrivalStatus: 'ARRIVED' | 'PARTIAL' | 'NOT_ARRIVED' | null;
     arrivalNotes: string | null;
+    // Reorder tracking for partial orders
+    isReordered?: boolean;
+    reorderedAt?: string | null;
+    reorderVendorName?: string | null;
+    reorderVendorContact?: string | null;
 }
 
 export interface Site {

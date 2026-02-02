@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store';
+import NotificationCenter from '../../src/components/NotificationCenter';
 
 const theme = {
     colors: {
@@ -57,12 +58,15 @@ export default function DirectorDashboard() {
                     <Text style={styles.userName}>{user?.name || 'Director'}</Text>
                     <Text style={styles.role}>Director</Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.profileButton}
-                    onPress={() => router.push('/(director)/account' as any)}
-                >
-                    <Ionicons name="person-circle-outline" size={40} color="#FFFFFF" />
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <NotificationCenter primaryColor={theme.colors.primary} />
+                    <TouchableOpacity
+                        style={styles.profileButton}
+                        onPress={() => router.push('/(director)/account' as any)}
+                    >
+                        <Ionicons name="person-circle-outline" size={40} color="#FFFFFF" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -116,6 +120,7 @@ const styles = StyleSheet.create({
     greeting: { fontSize: 16, color: 'rgba(255,255,255,0.8)' },
     userName: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginTop: 2 },
     role: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
+    headerActions: { flexDirection: 'row', alignItems: 'center' },
     profileButton: { padding: 4 },
     scrollView: {
         flex: 1,

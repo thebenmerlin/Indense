@@ -42,7 +42,31 @@ class NotificationsController {
             next(error);
         }
     }
+
+    async registerPushToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { pushToken } = req.body;
+            if (!pushToken) {
+                res.status(400).json({ success: false, message: 'Push token is required' });
+                return;
+            }
+            await notificationsService.registerPushToken(req.user!.id, pushToken);
+            res.json({ success: true, message: 'Push token registered' });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async unregisterPushToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            await notificationsService.unregisterPushToken(req.user!.id);
+            res.json({ success: true, message: 'Push token unregistered' });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export const notificationsController = new NotificationsController();
 export default notificationsController;
+
