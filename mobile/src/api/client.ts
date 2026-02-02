@@ -6,7 +6,7 @@ import { storage } from '../utils/storage';
 // For physical device: use your computer's local IP address
 const BASE_URL = __DEV__
     ? 'http://192.168.0.105:3000/api/v1'  // Your local machine IP
-    : 'https://indense.onrender.com/api/v1';
+    : 'https://indense.onrender.com/api/v1';  // Production Render backend
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
