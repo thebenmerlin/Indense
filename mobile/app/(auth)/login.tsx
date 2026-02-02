@@ -12,7 +12,11 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../../src/store';
+import axios from 'axios';
+import * as SecureStore from 'expo-secure-store';
+
+// Direct API URL - no auth store import needed
+const API_URL = 'https://indense.onrender.com/api/v1';
 
 const theme = {
     colors: {
@@ -33,7 +37,6 @@ export default function LoginScreen() {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-    const login = useAuthStore((state) => state.login);
     const router = useRouter();
 
     const validate = () => {
@@ -58,12 +61,36 @@ export default function LoginScreen() {
 
         setLoading(true);
         try {
-            await login(email.trim().toLowerCase(), password);
+            // Direct API call - no auth store
+            const response = await axios.post(`${API_URL}/auth/login`, {
+                email: email.trim().toLowerCase(),
+                password,
+            });
+
+            const { user, accessToken, refreshToken } = response.data.data;
+
+            // Store tokens directly
+            try {
+                await SecureStore.setItemAsync('auth_access_token', accessToken);
+                await SecureStore.setItemAsync('auth_refresh_token', refreshToken);
+                await SecureStore.setItemAsync('auth_user', JSON.stringify(user));
+            } catch (storeError) {
+                console.warn('Failed to store tokens:', storeError);
+            }
+
+            // Navigate based on role
+            if (user.role === 'SITE_ENGINEER') {
+                router.replace('/(site-engineer)/dashboard');
+            } else if (user.role === 'PURCHASE_TEAM') {
+                router.replace('/(purchase-team)/dashboard');
+            } else if (user.role === 'DIRECTOR') {
+                router.replace('/(director)/dashboard');
+            } else {
+                Alert.alert('Success', 'Logged in! Role: ' + user.role);
+            }
         } catch (error: any) {
-            Alert.alert(
-                'Login Failed',
-                error.response?.data?.error || error.message || 'Invalid email or password'
-            );
+            const message = error.response?.data?.error || error.message || 'Invalid email or password';
+            Alert.alert('Login Failed', message);
         } finally {
             setLoading(false);
         }
