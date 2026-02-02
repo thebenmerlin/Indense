@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/store';
 import { Role } from '../src/constants';
+import ErrorBoundary from '../src/components/ErrorBoundary';
 
 export default function RootLayout() {
     const { isAuthenticated, isLoading, user, loadStoredAuth } = useAuthStore();
@@ -41,7 +42,7 @@ export default function RootLayout() {
     }
 
     return (
-        <>
+        <ErrorBoundary>
             <StatusBar style="auto" />
             <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -49,7 +50,7 @@ export default function RootLayout() {
                 <Stack.Screen name="(purchase-team)" options={{ headerShown: false }} />
                 <Stack.Screen name="(director)" options={{ headerShown: false }} />
             </Stack>
-        </>
+        </ErrorBoundary>
     );
 }
 
