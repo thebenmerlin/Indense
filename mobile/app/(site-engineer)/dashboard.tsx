@@ -3,12 +3,27 @@ import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
-    TouchableOpacity,
     ScrollView,
+    TouchableOpacity,
+    Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
+import { Role, ROLE_NAMES } from '../../src/constants';
+import NotificationCenter from '../../src/components/NotificationCenter';
+
+const theme = {
+    colors: {
+        primary: '#3B82F6',
+        primaryDark: '#1E40AF',
+        surface: '#F9FAFB',
+        textPrimary: '#111827',
+        textSecondary: '#6B7280',
+        white: '#FFFFFF',
+        cardBg: '#FFFFFF',
+    }
+};
 
 export default function SiteEngineerDashboard() {
     const [user, setUser] = useState<any>(null);
@@ -21,113 +36,118 @@ export default function SiteEngineerDashboard() {
     const loadUser = async () => {
         try {
             const userJson = await SecureStore.getItemAsync('auth_user');
-            if (userJson) {
-                setUser(JSON.parse(userJson));
-            }
+            if (userJson) setUser(JSON.parse(userJson));
         } catch (e) {
             console.warn('Failed to load user:', e);
         }
     };
 
+    const logout = async () => {
+        try {
+            await SecureStore.deleteItemAsync('auth_access_token');
+            await SecureStore.deleteItemAsync('auth_refresh_token');
+            await SecureStore.deleteItemAsync('auth_user');
+        } catch (e) { }
+    };
+
+    const handleLogout = () => {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Logout',
+                style: 'destructive',
+                onPress: async () => {
+                    await logout();
+                    router.replace('/(auth)/login');
+                }
+            },
+        ]);
+    };
+
+    const menuItems = [
+        {
+            title: 'My Indents',
+            subtitle: 'View and manage your material requests',
+            icon: 'document-text-outline' as const,
+            route: '/(site-engineer)/indents',
+        },
+        {
+            title: 'Create Indent',
+            subtitle: 'Raise a new material request',
+            icon: 'add-circle-outline' as const,
+            route: '/(site-engineer)/indents/create',
+        },
+        {
+            title: 'Confirm Receipt',
+            subtitle: 'Confirm material deliveries',
+            icon: 'checkmark-circle-outline' as const,
+            route: '/(site-engineer)/receipts',
+        },
+        {
+            title: 'Report Damage',
+            subtitle: 'Report damaged materials',
+            icon: 'alert-circle-outline' as const,
+            route: '/(site-engineer)/damages',
+        },
+    ];
+
     return (
-        <SafeAreaView style={styles.container}>
+        <ScrollView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.greeting}>Welcome back,</Text>
-                <Text style={styles.name}>{user?.name || 'Site Engineer'}</Text>
+                <View>
+                    <Text style={styles.greeting}>Welcome back,</Text>
+                    <Text style={styles.name}>{user?.name || 'User'}</Text>
+                    <Text style={styles.role}>
+                        {user?.role ? ROLE_NAMES[user.role] : 'Site Engineer'} • {user?.siteName || 'Site'}
+                    </Text>
+                </View>
+                <View style={styles.headerActions}>
+                    <NotificationCenter primaryColor={theme.colors.primary} />
+                    <TouchableOpacity onPress={() => router.push('/(site-engineer)/account' as any)} style={styles.profileButton}>
+                        <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.9)" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                <View style={styles.statsRow}>
-                    <View style={[styles.statCard, { backgroundColor: '#EBF5FF' }]}>
-                        <Text style={[styles.statValue, { color: '#3B82F6' }]}>12</Text>
-                        <Text style={styles.statLabel}>Pending</Text>
-                    </View>
-                    <View style={[styles.statCard, { backgroundColor: '#FEF3C7' }]}>
-                        <Text style={[styles.statValue, { color: '#F59E0B' }]}>5</Text>
-                        <Text style={styles.statLabel}>In Progress</Text>
-                    </View>
-                    <View style={[styles.statCard, { backgroundColor: '#D1FAE5' }]}>
-                        <Text style={[styles.statValue, { color: '#10B981' }]}>28</Text>
-                        <Text style={styles.statLabel}>Completed</Text>
-                    </View>
-                </View>
-
+            <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Quick Actions</Text>
-
-                <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={() => router.push('/(site-engineer)/indents/create')}
-                >
-                    <Text style={styles.actionIcon}>📝</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Create New Indent</Text>
-                        <Text style={styles.actionDesc}>Request materials for your site</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={() => router.push('/(site-engineer)/indents')}
-                >
-                    <Text style={styles.actionIcon}>📋</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>My Indents</Text>
-                        <Text style={styles.actionDesc}>View all your material requests</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={() => router.push('/(site-engineer)/receipts')}
-                >
-                    <Text style={styles.actionIcon}>📦</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Receipts</Text>
-                        <Text style={styles.actionDesc}>Confirm material deliveries</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={() => router.push('/(site-engineer)/damages')}
-                >
-                    <Text style={styles.actionIcon}>⚠️</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Report Damage</Text>
-                        <Text style={styles.actionDesc}>Report damaged materials</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={() => router.push('/(site-engineer)/account')}
-                >
-                    <Text style={styles.actionIcon}>👤</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Account</Text>
-                        <Text style={styles.actionDesc}>Profile and settings</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
-            </ScrollView>
-        </SafeAreaView>
+                {menuItems.map((item, index) => (
+                    <TouchableOpacity
+                        key={index}
+                        onPress={() => router.push(item.route as any)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.card}>
+                            <View style={styles.menuContent}>
+                                <View style={styles.iconContainer}>
+                                    <Ionicons name={item.icon} size={28} color={theme.colors.primary} />
+                                </View>
+                                <View style={styles.menuText}>
+                                    <Text style={styles.menuTitle}>{item.title}</Text>
+                                    <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: theme.colors.surface,
     },
     header: {
-        backgroundColor: '#3B82F6',
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 30,
+        backgroundColor: theme.colors.primary,
+        padding: 24,
+        paddingTop: 48,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
     },
     greeting: {
         fontSize: 14,
@@ -135,72 +155,66 @@ const styles = StyleSheet.create({
     },
     name: {
         fontSize: 24,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
+        fontWeight: '700',
+        color: theme.colors.white,
+        marginTop: 4,
     },
-    content: {
-        flex: 1,
-        padding: 20,
+    role: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.8)',
+        marginTop: 4,
     },
-    statsRow: {
+    headerActions: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 24,
-    },
-    statCard: {
-        flex: 1,
-        marginHorizontal: 4,
-        padding: 16,
-        borderRadius: 12,
         alignItems: 'center',
     },
-    statValue: {
-        fontSize: 24,
-        fontWeight: 'bold',
+    profileButton: {
+        padding: 4,
     },
-    statLabel: {
-        fontSize: 12,
-        color: '#6B7280',
-        marginTop: 4,
+    section: {
+        padding: 16,
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#111827',
+        color: theme.colors.textPrimary,
         marginBottom: 12,
     },
-    actionCard: {
-        backgroundColor: '#FFFFFF',
+    card: {
+        backgroundColor: theme.colors.cardBg,
         borderRadius: 12,
         padding: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
         marginBottom: 12,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
     },
-    actionIcon: {
-        fontSize: 28,
+    menuContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    iconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        backgroundColor: '#EBF5FF',
+        justifyContent: 'center',
+        alignItems: 'center',
         marginRight: 16,
     },
-    actionContent: {
+    menuText: {
         flex: 1,
     },
-    actionTitle: {
+    menuTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: theme.colors.textPrimary,
     },
-    actionDesc: {
-        fontSize: 12,
-        color: '#6B7280',
+    menuSubtitle: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
         marginTop: 2,
-    },
-    actionArrow: {
-        fontSize: 20,
-        color: '#9CA3AF',
     },
 });

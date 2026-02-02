@@ -1,13 +1,57 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    TouchableOpacity,
+    SafeAreaView,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
+import NotificationCenter from '../../src/components/NotificationCenter';
+
+const theme = {
+    colors: {
+        primary: '#1E3A8A',
+        surface: '#F8FAFC',
+        cardBg: '#FFFFFF',
+        textPrimary: '#0F172A',
+        textSecondary: '#64748B',
+        border: '#E2E8F0',
+        accent: '#3B82F6',
+    }
+};
+
+interface MenuCardProps {
+    title: string;
+    subtitle: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    color: string;
+    onPress: () => void;
+}
+
+const MenuCard = ({ title, subtitle, icon, color, onPress }: MenuCardProps) => (
+    <TouchableOpacity style={styles.menuCard} onPress={onPress} activeOpacity={0.7}>
+        <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
+            <Ionicons name={icon} size={32} color={color} />
+        </View>
+        <View style={styles.menuCardContent}>
+            <Text style={styles.menuCardTitle}>{title}</Text>
+            <Text style={styles.menuCardSubtitle}>{subtitle}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={24} color={theme.colors.textSecondary} />
+    </TouchableOpacity>
+);
 
 export default function DirectorDashboard() {
     const [user, setUser] = useState<any>(null);
     const router = useRouter();
 
-    useEffect(() => { loadUser(); }, []);
+    useEffect(() => {
+        loadUser();
+    }, []);
 
     const loadUser = async () => {
         try {
@@ -18,95 +62,115 @@ export default function DirectorDashboard() {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.greeting}>Welcome back,</Text>
-                <Text style={styles.name}>{user?.name || 'Director'}</Text>
-                <Text style={styles.role}>Director</Text>
+                <View style={styles.headerContent}>
+                    <Text style={styles.greeting}>Welcome,</Text>
+                    <Text style={styles.userName}>{user?.name || 'Director'}</Text>
+                    <Text style={styles.role}>Director</Text>
+                </View>
+                <View style={styles.headerActions}>
+                    <NotificationCenter primaryColor={theme.colors.primary} />
+                    <TouchableOpacity
+                        style={styles.profileButton}
+                        onPress={() => router.push('/(director)/account' as any)}
+                    >
+                        <Ionicons name="person-circle-outline" size={40} color="#FFFFFF" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                <View style={styles.statsRow}>
-                    <View style={[styles.statCard, { backgroundColor: '#FEF3C7' }]}>
-                        <Text style={[styles.statValue, { color: '#F59E0B' }]}>5</Text>
-                        <Text style={styles.statLabel}>Pending</Text>
-                    </View>
-                    <View style={[styles.statCard, { backgroundColor: '#D1FAE5' }]}>
-                        <Text style={[styles.statValue, { color: '#10B981' }]}>42</Text>
-                        <Text style={styles.statLabel}>Approved</Text>
-                    </View>
-                </View>
+            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+                <Text style={styles.sectionTitle}>Main Menu</Text>
 
-                <Text style={styles.sectionTitle}>Quick Actions</Text>
+                {/* Director's Space */}
+                <MenuCard
+                    title="Director's Space"
+                    subtitle="Sites, Roles & Materials"
+                    icon="grid-outline"
+                    color="#8B5CF6"
+                    onPress={() => router.push('/(director)/space' as any)}
+                />
 
-                <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(director)/indents')}>
-                    <Text style={styles.actionIcon}>📋</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Pending Approvals</Text>
-                        <Text style={styles.actionDesc}>Review and approve indents</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
+                {/* Indents */}
+                <MenuCard
+                    title="Indents"
+                    subtitle="Pending, All, Damaged & Partial"
+                    icon="document-text-outline"
+                    color="#3B82F6"
+                    onPress={() => router.push('/(director)/indents/pending' as any)}
+                />
 
-                <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(director)/analytics')}>
-                    <Text style={styles.actionIcon}>📊</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Analytics</Text>
-                        <Text style={styles.actionDesc}>View business insights</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
+                {/* Analytics */}
+                <MenuCard
+                    title="Analytics"
+                    subtitle="Reports & Insights"
+                    icon="bar-chart-outline"
+                    color="#10B981"
+                    onPress={() => router.push('/(director)/analytics' as any)}
+                />
 
-                <TouchableOpacity style={styles.actionCard}>
-                    <Text style={styles.actionIcon}>📁</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>All Indents</Text>
-                        <Text style={styles.actionDesc}>Browse all material requests</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionCard}>
-                    <Text style={styles.actionIcon}>⚙️</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Management</Text>
-                        <Text style={styles.actionDesc}>Sites, users, and materials</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(director)/account')}>
-                    <Text style={styles.actionIcon}>👤</Text>
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>Account</Text>
-                        <Text style={styles.actionDesc}>Profile and settings</Text>
-                    </View>
-                    <Text style={styles.actionArrow}>→</Text>
-                </TouchableOpacity>
+                <View style={{ height: 40 }} />
             </ScrollView>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F3F4F6' },
-    header: { backgroundColor: '#059669', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 30 },
-    greeting: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
-    name: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' },
-    role: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
-    content: { flex: 1, padding: 20 },
-    statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
-    statCard: { flex: 1, marginHorizontal: 4, padding: 16, borderRadius: 12, alignItems: 'center' },
-    statValue: { fontSize: 24, fontWeight: 'bold' },
-    statLabel: { fontSize: 12, color: '#6B7280', marginTop: 4 },
-    sectionTitle: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 12 },
-    actionCard: {
-        backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, flexDirection: 'row',
-        alignItems: 'center', marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    container: { flex: 1, backgroundColor: theme.colors.primary },
+    header: {
+        backgroundColor: theme.colors.primary,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 24,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
     },
-    actionIcon: { fontSize: 28, marginRight: 16 },
-    actionContent: { flex: 1 },
-    actionTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
-    actionDesc: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-    actionArrow: { fontSize: 20, color: '#9CA3AF' },
+    headerContent: { flex: 1 },
+    greeting: { fontSize: 16, color: 'rgba(255,255,255,0.8)' },
+    userName: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginTop: 2 },
+    role: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
+    headerActions: { flexDirection: 'row', alignItems: 'center' },
+    profileButton: { padding: 4 },
+    scrollView: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 20,
+        paddingTop: 24,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 16,
+    },
+    menuCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    iconContainer: {
+        width: 56,
+        height: 56,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    menuCardContent: { flex: 1 },
+    menuCardTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
+    menuCardSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
 });
