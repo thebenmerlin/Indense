@@ -6,7 +6,6 @@ import {
     SafeAreaView,
     TouchableOpacity,
     ScrollView,
-    Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
@@ -28,17 +27,6 @@ export default function SiteEngineerDashboard() {
         } catch (e) {
             console.warn('Failed to load user:', e);
         }
-    };
-
-    const handleLogout = async () => {
-        try {
-            await SecureStore.deleteItemAsync('auth_access_token');
-            await SecureStore.deleteItemAsync('auth_refresh_token');
-            await SecureStore.deleteItemAsync('auth_user');
-        } catch (e) {
-            console.warn('Logout error:', e);
-        }
-        router.replace('/');
     };
 
     return (
@@ -66,7 +54,10 @@ export default function SiteEngineerDashboard() {
 
                 <Text style={styles.sectionTitle}>Quick Actions</Text>
 
-                <TouchableOpacity style={styles.actionCard}>
+                <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={() => router.push('/(site-engineer)/indents/create')}
+                >
                     <Text style={styles.actionIcon}>📝</Text>
                     <View style={styles.actionContent}>
                         <Text style={styles.actionTitle}>Create New Indent</Text>
@@ -75,7 +66,10 @@ export default function SiteEngineerDashboard() {
                     <Text style={styles.actionArrow}>→</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionCard}>
+                <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={() => router.push('/(site-engineer)/indents')}
+                >
                     <Text style={styles.actionIcon}>📋</Text>
                     <View style={styles.actionContent}>
                         <Text style={styles.actionTitle}>My Indents</Text>
@@ -84,7 +78,10 @@ export default function SiteEngineerDashboard() {
                     <Text style={styles.actionArrow}>→</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionCard}>
+                <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={() => router.push('/(site-engineer)/receipts')}
+                >
                     <Text style={styles.actionIcon}>📦</Text>
                     <View style={styles.actionContent}>
                         <Text style={styles.actionTitle}>Receipts</Text>
@@ -93,7 +90,10 @@ export default function SiteEngineerDashboard() {
                     <Text style={styles.actionArrow}>→</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionCard}>
+                <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={() => router.push('/(site-engineer)/damages')}
+                >
                     <Text style={styles.actionIcon}>⚠️</Text>
                     <View style={styles.actionContent}>
                         <Text style={styles.actionTitle}>Report Damage</Text>
@@ -101,11 +101,19 @@ export default function SiteEngineerDashboard() {
                     </View>
                     <Text style={styles.actionArrow}>→</Text>
                 </TouchableOpacity>
-            </ScrollView>
 
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={() => router.push('/(site-engineer)/account')}
+                >
+                    <Text style={styles.actionIcon}>👤</Text>
+                    <View style={styles.actionContent}>
+                        <Text style={styles.actionTitle}>Account</Text>
+                        <Text style={styles.actionDesc}>Profile and settings</Text>
+                    </View>
+                    <Text style={styles.actionArrow}>→</Text>
+                </TouchableOpacity>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -194,17 +202,5 @@ const styles = StyleSheet.create({
     actionArrow: {
         fontSize: 20,
         color: '#9CA3AF',
-    },
-    logoutButton: {
-        margin: 20,
-        backgroundColor: '#EF4444',
-        borderRadius: 8,
-        paddingVertical: 14,
-        alignItems: 'center',
-    },
-    logoutText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
     },
 });
