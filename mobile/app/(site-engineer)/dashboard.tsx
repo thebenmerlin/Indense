@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store';
 import { Role, ROLE_NAMES } from '../../src/constants';
-import NotificationCenter from '../../src/components/NotificationCenter';
+// import NotificationCenter from '../../src/components/NotificationCenter'; // TODO: Uncomment after installing expo-notifications
 
 const theme = {
     colors: {
@@ -81,7 +81,7 @@ export default function SiteEngineerDashboard() {
                     </Text>
                 </View>
                 <View style={styles.headerActions}>
-                    <NotificationCenter primaryColor={theme.colors.primary} />
+                    {/* <NotificationCenter primaryColor={theme.colors.primary} /> */}
                     <TouchableOpacity onPress={() => router.push('/(site-engineer)/account' as any)} style={styles.profileButton}>
                         <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.9)" />
                     </TouchableOpacity>

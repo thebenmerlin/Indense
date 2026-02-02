@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store';
 import { ROLE_NAMES } from '../../src/constants';
 import { indentsApi } from '../../src/api';
-import NotificationCenter from '../../src/components/NotificationCenter';
+// import NotificationCenter from '../../src/components/NotificationCenter'; // TODO: Uncomment after installing expo-notifications
 
 const theme = {
     colors: {
@@ -133,7 +133,7 @@ export default function PurchaseTeamDashboard() {
                         </Text>
                     </View>
                     <View style={styles.headerActions}>
-                        <NotificationCenter primaryColor={theme.colors.primary} />
+                        {/* <NotificationCenter primaryColor={theme.colors.primary} /> */}
                         <TouchableOpacity
                             onPress={() => router.push('/(purchase-team)/account' as any)}
                             style={styles.profileButton}

@@ -10,7 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store';
-import NotificationCenter from '../../src/components/NotificationCenter';
+// import NotificationCenter from '../../src/components/NotificationCenter'; // TODO: Uncomment after installing expo-notifications
 
 const theme = {
     colors: {
@@ -59,7 +59,7 @@ export default function DirectorDashboard() {
                     <Text style={styles.role}>Director</Text>
                 </View>
                 <View style={styles.headerActions}>
-                    <NotificationCenter primaryColor={theme.colors.primary} />
+                    {/* <NotificationCenter primaryColor={theme.colors.primary} /> */}
                     <TouchableOpacity
                         style={styles.profileButton}
                         onPress={() => router.push('/(director)/account' as any)}
