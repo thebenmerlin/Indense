@@ -7,9 +7,11 @@ import {
     TouchableOpacity,
     RefreshControl,
     ActivityIndicator,
+    Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { sitesApi, Site } from '../../../../src/api';
 
 const theme = {
     colors: {
@@ -23,18 +25,6 @@ const theme = {
     }
 };
 
-interface Site {
-    id: string;
-    name: string;
-    code: string;
-    address: string | null;
-    city: string | null;
-    state: string | null;
-    startDate?: string;
-    expectedHandover?: string;
-    indentCount?: number;
-}
-
 export default function SitesList() {
     const [sites, setSites] = useState<Site[]>([]);
     const [loading, setLoading] = useState(true);
@@ -43,27 +33,26 @@ export default function SitesList() {
 
     const fetchSites = useCallback(async () => {
         try {
-            // TODO: Replace with actual API call
-            // const response = await sitesApi.getAll();
-            // setSites(response.data);
-
-            // Mock data for now
-            setSites([
-                { id: '1', name: 'Green Valley Residences', code: 'GVR', address: '123 Main St', city: 'Mumbai', state: 'Maharashtra', indentCount: 12 },
-                { id: '2', name: 'Skyline Towers', code: 'SKT', address: '456 Park Ave', city: 'Pune', state: 'Maharashtra', indentCount: 8 },
-                { id: '3', name: 'Riverside Complex', code: 'RSC', address: '789 River Rd', city: 'Bangalore', state: 'Karnataka', indentCount: 15 },
-            ]);
+            const response = await sitesApi.getAll({ 
+                includeCounts: true,
+                isClosed: false,
+            });
+            setSites(response.data);
         } catch (error) {
             console.error('Failed to fetch sites:', error);
+            Alert.alert('Error', 'Failed to load sites');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchSites();
-    }, [fetchSites]);
+    // Refresh when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchSites();
+        }, [fetchSites])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -83,7 +72,7 @@ export default function SitesList() {
                 <Text style={styles.siteName}>{item.name}</Text>
                 <View style={styles.locationRow}>
                     <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
-                    <Text style={styles.locationText}>{item.city || item.address}</Text>
+                    <Text style={styles.locationText}>{item.city || item.address || 'No location'}</Text>
                 </View>
             </View>
             <View style={styles.cardRight}>

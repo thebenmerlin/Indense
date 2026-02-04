@@ -13,8 +13,8 @@ import {
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { indentsApi } from '../../../src/api';
-import { Indent } from '../../../src/types';
+import { indentsApi, receiptsApi } from '../../../src/api';
+import { Indent, Receipt as ReceiptType } from '../../../src/types';
 
 const theme = {
     colors: {
@@ -28,11 +28,13 @@ const theme = {
     }
 };
 
-interface Receipt {
+interface LocalReceipt {
     id: string;
     name: string;
     imageUri: string;
     createdAt: Date;
+    isUploaded?: boolean;
+    serverReceipt?: ReceiptType;
 }
 
 export default function ReceiptDetail() {
@@ -40,24 +42,38 @@ export default function ReceiptDetail() {
     const [indent, setIndent] = useState<Indent | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [receipts, setReceipts] = useState<Receipt[]>([]);
+    const [receipts, setReceipts] = useState<LocalReceipt[]>([]);
     const [showAddReceipt, setShowAddReceipt] = useState(false);
     const [newReceiptName, setNewReceiptName] = useState('');
     const [newReceiptImage, setNewReceiptImage] = useState<string | null>(null);
+    const [apiBaseUrl, setApiBaseUrl] = useState('');
 
     useEffect(() => {
         if (id) {
-            fetchIndent();
+            fetchData();
         }
     }, [id]);
 
-    const fetchIndent = async () => {
+    const fetchData = async () => {
         try {
-            const data = await indentsApi.getById(id!);
-            setIndent(data);
-            // TODO: Fetch existing receipts from API
+            const [indentData, existingReceipts] = await Promise.all([
+                indentsApi.getById(id!),
+                receiptsApi.getByIndentId(id!),
+            ]);
+            setIndent(indentData);
+            
+            // Convert server receipts to local format
+            const localReceipts: LocalReceipt[] = existingReceipts.map(receipt => ({
+                id: receipt.id,
+                name: receipt.name || receipt.receiptNumber,
+                imageUri: receipt.images?.[0]?.path ? `${apiBaseUrl}/uploads/receipts/${receipt.images[0].filename}` : '',
+                createdAt: new Date(receipt.createdAt),
+                isUploaded: true,
+                serverReceipt: receipt,
+            }));
+            setReceipts(localReceipts);
         } catch (error) {
-            console.error('Failed to fetch indent:', error);
+            console.error('Failed to fetch data:', error);
         } finally {
             setLoading(false);
         }
@@ -116,7 +132,7 @@ export default function ReceiptDetail() {
         }
     };
 
-    const handleSaveReceipt = () => {
+    const handleSaveReceipt = async () => {
         if (!newReceiptName.trim()) {
             Alert.alert('Required', 'Please enter a receipt name');
             return;
@@ -126,38 +142,63 @@ export default function ReceiptDetail() {
             return;
         }
 
-        const newReceipt: Receipt = {
-            id: `temp-${Date.now()}`,
-            name: newReceiptName.trim(),
-            imageUri: newReceiptImage,
-            createdAt: new Date(),
-        };
-
-        setReceipts([...receipts, newReceipt]);
-        setNewReceiptName('');
-        setNewReceiptImage(null);
-        setShowAddReceipt(false);
-
-        // TODO: Upload to API
-        Alert.alert('Success', 'Receipt added successfully');
-    };
-
-    const handleSaveAllReceipts = async () => {
-        if (receipts.length === 0) {
-            Alert.alert('No Receipts', 'Please add at least one receipt');
-            return;
-        }
-
         setSaving(true);
         try {
-            // TODO: Upload all receipts to API
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            Alert.alert('Success', 'All receipts saved successfully');
+            // Create receipt on the server
+            const createdReceipt = await receiptsApi.create({
+                indentId: id!,
+                name: newReceiptName.trim(),
+            });
+
+            // Upload the image
+            const fileName = `receipt_${Date.now()}.jpg`;
+            await receiptsApi.uploadImage(createdReceipt.id, newReceiptImage, fileName);
+
+            // Add to local list
+            const newReceipt: LocalReceipt = {
+                id: createdReceipt.id,
+                name: newReceiptName.trim(),
+                imageUri: newReceiptImage,
+                createdAt: new Date(),
+                isUploaded: true,
+            };
+
+            setReceipts([...receipts, newReceipt]);
+            setNewReceiptName('');
+            setNewReceiptImage(null);
+            setShowAddReceipt(false);
+
+            Alert.alert('Success', 'Receipt added successfully');
         } catch (error) {
-            Alert.alert('Error', 'Failed to save receipts');
+            console.error('Failed to save receipt:', error);
+            Alert.alert('Error', 'Failed to save receipt. Please try again.');
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleDeleteReceipt = async (receiptId: string) => {
+        Alert.alert(
+            'Delete Receipt',
+            'Are you sure you want to delete this receipt?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await receiptsApi.deleteReceipt(receiptId);
+                            setReceipts(receipts.filter(r => r.id !== receiptId));
+                            Alert.alert('Success', 'Receipt deleted');
+                        } catch (error) {
+                            console.error('Failed to delete receipt:', error);
+                            Alert.alert('Error', 'Failed to delete receipt');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     if (loading) {
@@ -198,15 +239,29 @@ export default function ReceiptDetail() {
                     <Text style={styles.sectionTitle}>View Receipts</Text>
                     {receipts.map(receipt => (
                         <View key={receipt.id} style={styles.receiptCard}>
-                            <Image
-                                source={{ uri: receipt.imageUri }}
-                                style={styles.receiptImage}
-                                resizeMode="cover"
-                            />
+                            {receipt.imageUri ? (
+                                <Image
+                                    source={{ uri: receipt.imageUri }}
+                                    style={styles.receiptImage}
+                                    resizeMode="cover"
+                                />
+                            ) : (
+                                <View style={[styles.receiptImage, styles.noImage]}>
+                                    <Ionicons name="receipt-outline" size={32} color={theme.colors.textSecondary} />
+                                </View>
+                            )}
                             <View style={styles.receiptInfo}>
                                 <Text style={styles.receiptName}>{receipt.name}</Text>
                                 <Text style={styles.receiptDate}>{formatDate(receipt.createdAt)}</Text>
                             </View>
+                            {receipt.isUploaded && (
+                                <TouchableOpacity
+                                    style={styles.deleteButton}
+                                    onPress={() => handleDeleteReceipt(receipt.id)}
+                                >
+                                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                                </TouchableOpacity>
+                            )}
                         </View>
                     ))}
                 </View>
@@ -264,10 +319,15 @@ export default function ReceiptDetail() {
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.saveReceiptButton}
+                                style={[styles.saveReceiptButton, saving && styles.buttonDisabled]}
                                 onPress={handleSaveReceipt}
+                                disabled={saving}
                             >
-                                <Text style={styles.saveReceiptButtonText}>Add Receipt</Text>
+                                {saving ? (
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                ) : (
+                                    <Text style={styles.saveReceiptButtonText}>Add Receipt</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -284,24 +344,6 @@ export default function ReceiptDetail() {
                     <Text style={styles.addReceiptMainButtonText}>Add Receipt(s)</Text>
                 </TouchableOpacity>
             </View>
-
-            {/* Save All Button */}
-            {receipts.length > 0 && (
-                <TouchableOpacity
-                    style={styles.saveAllButton}
-                    onPress={handleSaveAllReceipts}
-                    disabled={saving}
-                >
-                    {saving ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                        <>
-                            <Ionicons name="save" size={20} color="#FFFFFF" />
-                            <Text style={styles.saveAllButtonText}>Save All Receipts</Text>
-                        </>
-                    )}
-                </TouchableOpacity>
-            )}
 
             <View style={{ height: 40 }} />
         </ScrollView>
@@ -502,5 +544,17 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: '700',
         color: '#FFFFFF',
+    },
+    buttonDisabled: {
+        opacity: 0.6,
+    },
+    noImage: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+    },
+    deleteButton: {
+        padding: 12,
+        justifyContent: 'center',
     },
 });

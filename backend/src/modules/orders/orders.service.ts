@@ -1,4 +1,4 @@
-import { IndentStatus, Role } from '@prisma/client';
+import { IndentStatus, Role, NotificationType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../../utils/errors';
 import { CreateOrderDto, UpdateOrderDto, PaginatedResult } from '../../types';
@@ -7,6 +7,9 @@ import { filterOrderForRole, filterOrdersForRole } from '../../utils/visibility'
 import { canPlaceOrder, validateTransition } from '../indents/indents.stateMachine';
 import { logIndentStateChange, createAuditLog } from '../../middleware/auditLog';
 import { AuditAction, EntityType } from '../../types/enums';
+import * as fs from 'fs';
+import * as path from 'path';
+import notificationsService from '../notifications/notifications.service';
 
 class OrdersService {
     private async generateOrderNumber(): Promise<string> {
@@ -30,7 +33,14 @@ class OrdersService {
     }
 
     async findAll(
-        params: { page?: number; limit?: number; siteId?: string },
+        params: { 
+            page?: number; 
+            limit?: number; 
+            siteId?: string;
+            isPurchased?: boolean;
+            fromDate?: Date;
+            toDate?: Date;
+        },
         userRole: Role
     ): Promise<PaginatedResult<unknown>> {
         const pag = parsePaginationParams(params);
@@ -39,13 +49,22 @@ class OrdersService {
         if (params.siteId) {
             where.indent = { siteId: params.siteId };
         }
+        if (params.isPurchased !== undefined) {
+            where.isPurchased = params.isPurchased;
+        }
+        if (params.fromDate || params.toDate) {
+            where.createdAt = {};
+            if (params.fromDate) (where.createdAt as Record<string, Date>).gte = params.fromDate;
+            if (params.toDate) (where.createdAt as Record<string, Date>).lte = params.toDate;
+        }
 
         const [orders, total] = await Promise.all([
             prisma.order.findMany({
                 where,
                 include: {
-                    indent: { include: { site: true } },
-                    orderItems: true,
+                    indent: { include: { site: true, createdBy: { select: { name: true } } } },
+                    orderItems: { include: { invoices: true } },
+                    invoices: true,
                     createdBy: { select: { name: true } },
                 },
                 skip: pag.skip,
@@ -68,8 +87,15 @@ class OrdersService {
         const order = await prisma.order.findUnique({
             where: { id },
             include: {
-                indent: { include: { site: true, items: { include: { material: true } } } },
-                orderItems: true,
+                indent: { 
+                    include: { 
+                        site: true, 
+                        items: { include: { material: true } },
+                        createdBy: { select: { name: true, email: true } },
+                    } 
+                },
+                orderItems: { include: { invoices: true } },
+                invoices: true,
                 createdBy: { select: { name: true } },
             },
         });
@@ -85,7 +111,10 @@ class OrdersService {
     }
 
     async create(data: CreateOrderDto, userId: string): Promise<unknown> {
-        const indent = await prisma.indent.findUnique({ where: { id: data.indentId } });
+        const indent = await prisma.indent.findUnique({
+            where: { id: data.indentId },
+            select: { id: true, status: true, createdById: true, indentNumber: true },
+        });
         if (!indent) throw new NotFoundError('Indent not found');
 
         if (!canPlaceOrder(indent.status)) {
@@ -106,6 +135,10 @@ class OrdersService {
                     vendorContact: data.vendorContact,
                     vendorEmail: data.vendorEmail,
                     vendorAddress: data.vendorAddress,
+                    vendorGstNo: data.vendorGstNo,
+                    vendorContactPerson: data.vendorContactPerson,
+                    vendorContactPhone: data.vendorContactPhone,
+                    vendorNatureOfBusiness: data.vendorNatureOfBusiness,
                     totalAmount: data.totalAmount,
                     taxAmount: data.taxAmount,
                     shippingAmount: data.shippingAmount,
@@ -121,10 +154,16 @@ class OrdersService {
                             quantity: item.quantity,
                             unitPrice: item.unitPrice,
                             totalPrice: item.unitPrice ? item.unitPrice * item.quantity : null,
+                            vendorName: item.vendorName,
+                            vendorAddress: item.vendorAddress,
+                            vendorGstNo: item.vendorGstNo,
+                            vendorContactPerson: item.vendorContactPerson,
+                            vendorContactPhone: item.vendorContactPhone,
+                            vendorNatureOfBusiness: item.vendorNatureOfBusiness,
                         })),
                     },
                 },
-                include: { orderItems: true },
+                include: { orderItems: true, invoices: true },
             });
 
             // Update indent status
@@ -145,6 +184,19 @@ class OrdersService {
             { orderNumber }
         );
 
+        await notificationsService.notifySiteEngineer(
+            NotificationType.ORDER_PLACED,
+            data.indentId,
+            `Order ${orderNumber} placed for indent ${indent.indentNumber}.`
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.ORDER_PLACED,
+            Role.DIRECTOR,
+            data.indentId,
+            `Order ${orderNumber} placed for indent ${indent.indentNumber}.`
+        );
+
         return order;
     }
 
@@ -159,10 +211,22 @@ class OrdersService {
         const updated = await prisma.order.update({
             where: { id },
             data: {
-                ...data,
+                vendorName: data.vendorName,
+                vendorContact: data.vendorContact,
+                vendorEmail: data.vendorEmail,
+                vendorAddress: data.vendorAddress,
+                vendorGstNo: data.vendorGstNo,
+                vendorContactPerson: data.vendorContactPerson,
+                vendorContactPhone: data.vendorContactPhone,
+                vendorNatureOfBusiness: data.vendorNatureOfBusiness,
+                totalAmount: data.totalAmount,
+                taxAmount: data.taxAmount,
+                shippingAmount: data.shippingAmount,
                 grandTotal,
+                expectedDeliveryDate: data.expectedDeliveryDate,
+                remarks: data.remarks,
             },
-            include: { orderItems: true },
+            include: { orderItems: { include: { invoices: true } }, invoices: true },
         });
 
         await createAuditLog(userId, {
@@ -173,6 +237,270 @@ class OrdersService {
         });
 
         return updated;
+    }
+
+    /**
+     * Mark order as purchased
+     */
+    async markAsPurchased(id: string, userId: string): Promise<unknown> {
+        const order = await prisma.order.findUnique({ where: { id } });
+        if (!order) throw new NotFoundError('Order not found');
+
+        const updated = await prisma.order.update({
+            where: { id },
+            data: {
+                isPurchased: true,
+                purchasedAt: new Date(),
+            },
+            include: { orderItems: true, invoices: true },
+        });
+
+        await createAuditLog(userId, {
+            action: AuditAction.ORDER_UPDATED,
+            entityType: EntityType.ORDER,
+            entityId: id,
+            indentId: order.indentId,
+            metadata: { action: 'marked_as_purchased' },
+        });
+
+        return updated;
+    }
+
+    /**
+     * Update order item vendor details and pricing
+     */
+    async updateOrderItem(
+        orderId: string,
+        itemId: string,
+        data: {
+            vendorName?: string;
+            vendorAddress?: string;
+            vendorGstNo?: string;
+            vendorContactPerson?: string;
+            vendorContactPhone?: string;
+            vendorNatureOfBusiness?: string;
+            quantity?: number;
+            unitPrice?: number;
+        },
+        userId: string
+    ): Promise<unknown> {
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        if (!order) throw new NotFoundError('Order not found');
+
+        const orderItem = await prisma.orderItem.findFirst({
+            where: { id: itemId, orderId },
+        });
+        if (!orderItem) throw new NotFoundError('Order item not found');
+
+        const totalPrice = data.unitPrice && data.quantity
+            ? data.unitPrice * data.quantity
+            : data.unitPrice
+                ? data.unitPrice * orderItem.quantity
+                : data.quantity && orderItem.unitPrice
+                    ? orderItem.unitPrice * data.quantity
+                    : orderItem.totalPrice;
+
+        const updated = await prisma.orderItem.update({
+            where: { id: itemId },
+            data: {
+                ...data,
+                totalPrice,
+            },
+            include: { invoices: true },
+        });
+
+        await createAuditLog(userId, {
+            action: AuditAction.ORDER_UPDATED,
+            entityType: EntityType.ORDER,
+            entityId: orderId,
+            indentId: order.indentId,
+            metadata: { itemId, action: 'item_updated' },
+        });
+
+        return updated;
+    }
+
+    /**
+     * Upload invoice for an order
+     */
+    async uploadOrderInvoice(
+        orderId: string,
+        file: Express.Multer.File,
+        name: string,
+        userId: string
+    ): Promise<unknown> {
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        if (!order) throw new NotFoundError('Order not found');
+
+        const invoice = await prisma.orderInvoice.create({
+            data: {
+                orderId,
+                name,
+                filename: file.filename,
+                originalName: file.originalname,
+                mimeType: file.mimetype,
+                size: file.size,
+                path: file.path,
+            },
+        });
+
+        await createAuditLog(userId, {
+            action: AuditAction.ORDER_UPDATED,
+            entityType: EntityType.ORDER,
+            entityId: orderId,
+            indentId: order.indentId,
+            metadata: { invoiceId: invoice.id, action: 'invoice_uploaded' },
+        });
+
+        return invoice;
+    }
+
+    /**
+     * Upload invoice for an order item
+     */
+    async uploadOrderItemInvoice(
+        orderId: string,
+        itemId: string,
+        file: Express.Multer.File,
+        name: string,
+        userId: string
+    ): Promise<unknown> {
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        if (!order) throw new NotFoundError('Order not found');
+
+        const orderItem = await prisma.orderItem.findFirst({
+            where: { id: itemId, orderId },
+        });
+        if (!orderItem) throw new NotFoundError('Order item not found');
+
+        const invoice = await prisma.orderItemInvoice.create({
+            data: {
+                orderItemId: itemId,
+                name,
+                filename: file.filename,
+                originalName: file.originalname,
+                mimeType: file.mimetype,
+                size: file.size,
+                path: file.path,
+            },
+        });
+
+        await createAuditLog(userId, {
+            action: AuditAction.ORDER_UPDATED,
+            entityType: EntityType.ORDER,
+            entityId: orderId,
+            indentId: order.indentId,
+            metadata: { itemId, invoiceId: invoice.id, action: 'item_invoice_uploaded' },
+        });
+
+        return invoice;
+    }
+
+    /**
+     * Delete order invoice
+     */
+    async deleteOrderInvoice(orderId: string, invoiceId: string, userId: string): Promise<void> {
+        const invoice = await prisma.orderInvoice.findFirst({
+            where: { id: invoiceId, orderId },
+        });
+        if (!invoice) throw new NotFoundError('Invoice not found');
+
+        // Delete file
+        if (fs.existsSync(invoice.path)) {
+            fs.unlinkSync(invoice.path);
+        }
+
+        await prisma.orderInvoice.delete({ where: { id: invoiceId } });
+
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        if (order) {
+            await createAuditLog(userId, {
+                action: AuditAction.ORDER_UPDATED,
+                entityType: EntityType.ORDER,
+                entityId: orderId,
+                indentId: order.indentId,
+                metadata: { invoiceId, action: 'invoice_deleted' },
+            });
+        }
+    }
+
+    /**
+     * Delete order item invoice
+     */
+    async deleteOrderItemInvoice(
+        orderId: string,
+        itemId: string,
+        invoiceId: string,
+        userId: string
+    ): Promise<void> {
+        const invoice = await prisma.orderItemInvoice.findFirst({
+            where: { id: invoiceId, orderItemId: itemId },
+        });
+        if (!invoice) throw new NotFoundError('Invoice not found');
+
+        // Delete file
+        if (fs.existsSync(invoice.path)) {
+            fs.unlinkSync(invoice.path);
+        }
+
+        await prisma.orderItemInvoice.delete({ where: { id: invoiceId } });
+
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        if (order) {
+            await createAuditLog(userId, {
+                action: AuditAction.ORDER_UPDATED,
+                entityType: EntityType.ORDER,
+                entityId: orderId,
+                indentId: order.indentId,
+                metadata: { itemId, invoiceId, action: 'item_invoice_deleted' },
+            });
+        }
+    }
+
+    /**
+     * Get director-approved indents ready for ordering
+     */
+    async getApprovedIndents(
+        params: {
+            page?: number;
+            limit?: number;
+            siteId?: string;
+            fromDate?: Date;
+            toDate?: Date;
+        }
+    ): Promise<PaginatedResult<unknown>> {
+        const pag = parsePaginationParams(params);
+
+        const where: Record<string, unknown> = {
+            status: IndentStatus.DIRECTOR_APPROVED,
+            order: null, // No order created yet
+        };
+
+        if (params.siteId) where.siteId = params.siteId;
+        if (params.fromDate || params.toDate) {
+            where.createdAt = {};
+            if (params.fromDate) (where.createdAt as Record<string, Date>).gte = params.fromDate;
+            if (params.toDate) (where.createdAt as Record<string, Date>).lte = params.toDate;
+        }
+
+        const [indents, total] = await Promise.all([
+            prisma.indent.findMany({
+                where,
+                include: {
+                    site: { select: { name: true, code: true } },
+                    createdBy: { select: { name: true } },
+                    items: {
+                        include: { material: { include: { unit: true } } },
+                    },
+                },
+                skip: pag.skip,
+                take: pag.take,
+                orderBy: { directorApprovedAt: 'desc' },
+            }),
+            prisma.indent.count({ where }),
+        ]);
+
+        return buildPaginatedResult(indents, total, pag);
     }
 }
 

@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
   // directUrl is only needed for connection pooling services like Neon
   // directUrl = env("DIRECT_URL")
 }
@@ -64,6 +64,7 @@ enum DamageStatus {
   DRAFT
   REPORTED
   ACKNOWLEDGED
+  REORDERED
   RESOLVED
 }
 
@@ -81,48 +82,51 @@ enum SecurityQuestion {
 // ============================================================================
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  phone        String?  @unique  // Phone number for login
-  password     String
-  name         String
-  dob          DateTime?          // Date of birth
-  role         Role
-  isActive     Boolean  @default(true)
-  
+  id         String    @id @default(uuid())
+  email      String    @unique
+  phone      String?   @unique // Phone number for login
+  password   String
+  name       String
+  dob        DateTime? // Date of birth
+  role       Role
+  isActive   Boolean   @default(true)
+  isRevoked  Boolean   @default(false) // Revoked users cannot login
+
   // Security question for password recovery
-  securityQuestion  SecurityQuestion?
-  securityAnswer    String?         // Hashed answer
-  
+  securityQuestion SecurityQuestion?
+  securityAnswer   String? // Hashed answer
+
   // Multi-site support for Site Engineers
   // currentSiteId tracks the active site for session
-  currentSiteId     String?
-  currentSite       Site?    @relation("CurrentSite", fields: [currentSiteId], references: [id])
-  
+  currentSiteId String?
+  currentSite   Site?   @relation("CurrentSite", fields: [currentSiteId], references: [id])
+
   // Theme preference
-  theme             String   @default("light")  // light or dark
-  
+  theme String @default("light") // light or dark
+
   // Push notification token (Expo)
-  pushToken         String?
-  
+  pushToken String?
+
   // Timestamps
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  lastLoginAt  DateTime?
-  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
   // Relations
-  sites            UserSite[]      // Many-to-many with sites
-  indents          Indent[]        @relation("IndentCreator")
+  sites             UserSite[] // Many-to-many with sites
+  indents           Indent[]       @relation("IndentCreator")
   purchaseApprovals Indent[]       @relation("PurchaseApprover")
   directorApprovals Indent[]       @relation("DirectorApprover")
-  orders           Order[]         @relation("OrderCreator")
-  receipts         Receipt[]       @relation("ReceiptCreator")
-  damageReports    DamageReport[]  @relation("DamageReporter")
-  returns          Return[]        @relation("ReturnCreator")
-  notifications    Notification[]
-  auditLogs        AuditLog[]
-  refreshTokens    RefreshToken[]
-  
+  orders            Order[]        @relation("OrderCreator")
+  receipts          Receipt[]      @relation("ReceiptCreator")
+  damageReports     DamageReport[] @relation("DamageReporter")
+  damageReorders    DamageReport[] @relation("DamageReorderer")
+  returns           Return[]       @relation("ReturnCreator")
+  returnApprovals   Return[]       @relation("ReturnApprover")
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  refreshTokens     RefreshToken[]
+
   @@index([email])
   @@index([phone])
   @@index([role])
@@ -136,7 +140,7 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
-  
+
   @@index([userId])
   @@index([token])
 }
@@ -146,22 +150,29 @@ model RefreshToken {
 // ============================================================================
 
 model Site {
-  id          String   @id @default(uuid())
-  name        String
-  code        String   @unique
-  address     String?
-  city        String?
-  state       String?
-  isActive    Boolean  @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id                     String    @id @default(uuid())
+  name                   String
+  code                   String    @unique
+  address                String?
+  city                   String?
+  state                  String?
+  isActive               Boolean   @default(true)
+  isClosed               Boolean   @default(false) // Closed sites (completed projects)
+  startDate              DateTime? // Project start date
+  expectedHandoverDate   DateTime? // Expected project handover date
+  closedAt               DateTime? // Timestamp when site was closed
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  users           UserSite[]     // Many-to-many with users
-  currentUsers    User[]         @relation("CurrentSite")  // Users with this as current site
-  indents         Indent[]
-  
+  users         UserSite[] // Many-to-many with users
+  currentUsers  User[]         @relation("CurrentSite") // Users with this as current site
+  indents       Indent[]
+  receipts      Receipt[]
+  damageReports DamageReport[]
+  returns       Return[]
+
   @@index([code])
   @@index([isActive])
 }
@@ -174,7 +185,7 @@ model UserSite {
   siteId    String
   site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  
+
   @@unique([userId, siteId])
   @@index([userId])
   @@index([siteId])
@@ -185,15 +196,15 @@ model UserSite {
 // ============================================================================
 
 model ItemGroup {
-  id        String     @id @default(uuid())
-  name      String     @unique
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
   materials Material[]
-  
+
   @@index([name])
   @@index([isActive])
 }
@@ -203,16 +214,16 @@ model ItemGroup {
 // ============================================================================
 
 model UnitOfMeasure {
-  id        String     @id @default(uuid())
-  code      String     @unique  // e.g., "KG", "MTR", "SFT"
-  name      String               // Full name: "Kilogram", "Meter", "Square Foot"
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  
+  id        String   @id @default(uuid())
+  code      String   @unique // e.g., "KG", "MTR", "SFT"
+  name      String // Full name: "Kilogram", "Meter", "Square Foot"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
   materials Material[]
-  
+
   @@index([code])
   @@index([isActive])
 }
@@ -222,31 +233,31 @@ model UnitOfMeasure {
 // ============================================================================
 
 model Material {
-  id            String   @id @default(uuid())
-  name          String
-  code          String   @unique
-  description   String?
-  isActive      Boolean  @default(true)
-  isSystemData  Boolean  @default(false)  // True for seeded materials from Excel
-  
+  id           String  @id @default(uuid())
+  name         String
+  code         String  @unique
+  description  String?
+  isActive     Boolean @default(true)
+  isSystemData Boolean @default(false) // True for seeded materials from Excel
+
   // Foreign key to ItemGroup (category)
-  itemGroupId   String
-  itemGroup     ItemGroup @relation(fields: [itemGroupId], references: [id])
-  
+  itemGroupId String
+  itemGroup   ItemGroup @relation(fields: [itemGroupId], references: [id])
+
   // Foreign key to UnitOfMeasure
-  unitId        String
-  unit          UnitOfMeasure @relation(fields: [unitId], references: [id])
-  
+  unitId String
+  unit   UnitOfMeasure @relation(fields: [unitId], references: [id])
+
   // Extensible specifications as JSON
   // Contains available options for size, dimensions, colors, etc.
-  specifications Json?  // { "sizes": ["S", "M", "L"], "colors": ["Red", "Blue"], "dimensions": [...] }
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  specifications Json? // { "sizes": ["S", "M", "L"], "colors": ["Red", "Blue"], "dimensions": [...] }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  indentItems   IndentItem[]
-  
+  indentItems IndentItem[]
+
   @@index([name])
   @@index([code])
   @@index([itemGroupId])
@@ -258,54 +269,63 @@ model Material {
 // ============================================================================
 
 model Indent {
-  id              String       @id @default(uuid())
-  indentNumber    String       @unique  // Auto-generated: IND-SITE-YYYYMM-XXXX
-  name            String                // User-provided indent name
-  description     String?               // Optional description
-  status          IndentStatus @default(SUBMITTED)
-  
+  id           String       @id @default(uuid())
+  indentNumber String       @unique // Auto-generated: IND-SITE-YYYYMM-XXXX
+  name         String // User-provided indent name
+  description  String? // Optional description
+  status       IndentStatus @default(SUBMITTED)
+
   // Site relationship
-  siteId          String
-  site            Site         @relation(fields: [siteId], references: [id])
-  
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id])
+
   // Creator (Site Engineer)
-  createdById     String
-  createdBy       User         @relation("IndentCreator", fields: [createdById], references: [id])
-  
+  createdById String
+  createdBy   User   @relation("IndentCreator", fields: [createdById], references: [id])
+
   // Purchase Team Approval
-  purchaseApprovedById  String?
-  purchaseApprovedBy    User?    @relation("PurchaseApprover", fields: [purchaseApprovedById], references: [id])
-  purchaseApprovedAt    DateTime?
-  purchaseRemarks       String?
-  
+  purchaseApprovedById String?
+  purchaseApprovedBy   User?     @relation("PurchaseApprover", fields: [purchaseApprovedById], references: [id])
+  purchaseApprovedAt   DateTime?
+  purchaseRemarks      String?
+
   // Director Approval
-  directorApprovedById  String?
-  directorApprovedBy    User?    @relation("DirectorApprover", fields: [directorApprovedById], references: [id])
-  directorApprovedAt    DateTime?
-  directorRemarks       String?
-  
+  directorApprovedById String?
+  directorApprovedBy   User?     @relation("DirectorApprover", fields: [directorApprovedById], references: [id])
+  directorApprovedAt   DateTime?
+  directorRemarks      String?
+
   // Rejection info (if rejected at any stage)
   rejectedById    String?
   rejectedAt      DateTime?
   rejectionReason String?
-  
+
+  // On Hold info (Director can put indent on hold)
+  isOnHold       Boolean   @default(false)
+  onHoldAt       DateTime?
+  onHoldById     String?
+  onHoldReason   String?
+  releasedFromHoldAt DateTime?
+
   // Priority and notes
-  priority        String    @default("NORMAL")  // LOW, NORMAL, HIGH, URGENT
-  notes           String?
-  requiredByDate  DateTime?
-  expectedDeliveryDate DateTime?        // Expected delivery date
-  
+  priority             String    @default("NORMAL") // LOW, NORMAL, HIGH, URGENT
+  notes                String?
+  requiredByDate       DateTime?
+  expectedDeliveryDate DateTime? // Expected delivery date
+
   // Timestamps
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  closedAt        DateTime?
-  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  closedAt  DateTime?
+
   // Relations
-  items           IndentItem[]
-  order           Order?
-  notifications   Notification[]
-  auditLogs       AuditLog[]
-  
+  items         IndentItem[]
+  order         Order?
+  receipts      Receipt[]
+  damageReports DamageReport[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
   @@index([indentNumber])
   @@index([status])
   @@index([siteId])
@@ -314,42 +334,42 @@ model Indent {
 }
 
 model IndentItem {
-  id              String   @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Indent relationship
-  indentId        String
-  indent          Indent   @relation(fields: [indentId], references: [id], onDelete: Cascade)
-  
+  indentId String
+  indent   Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+
   // Material relationship
-  materialId      String
-  material        Material @relation(fields: [materialId], references: [id])
-  
+  materialId String
+  material   Material @relation(fields: [materialId], references: [id])
+
   // Quantities
-  requestedQty    Float
-  receivedQty     Float    @default(0)
-  pendingQty      Float    // Calculated: requestedQty - receivedQty
-  
+  requestedQty Float
+  receivedQty  Float @default(0)
+  pendingQty   Float // Calculated: requestedQty - receivedQty
+
   // Urgent flag
-  isUrgent        Boolean  @default(false)  // True if material is needed urgently
-  
+  isUrgent Boolean @default(false) // True if material is needed urgently
+
   // Arrival status (for Site Engineer tracking after purchase)
   // GREEN = arrived, YELLOW = partially arrived, RED = not arrived
-  arrivalStatus   String?  // null, "ARRIVED", "PARTIAL", "NOT_ARRIVED"
-  arrivalNotes    String?  // Notes for partial arrival
-  
+  arrivalStatus String? // null, "ARRIVED", "PARTIAL", "NOT_ARRIVED"
+  arrivalNotes  String? // Notes for partial arrival
+
   // Specifications selected for this item
-  specifications  Json?    // { "size": "Large", "color": "Red", "dimensions": "10x10" }
-  
+  specifications Json? // { "size": "Large", "color": "Red", "dimensions": "10x10" }
+
   // Notes specific to this item
-  notes           String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  receiptItems    ReceiptItem[]
-  damageReports   DamageReport[]
-  
+  receiptItems  ReceiptItem[]
+  damageReports DamageReport[]
+
   @@index([indentId])
   @@index([materialId])
 }
@@ -359,64 +379,129 @@ model IndentItem {
 // ============================================================================
 
 model Order {
-  id              String   @id @default(uuid())
-  orderNumber     String   @unique  // Auto-generated: ORD-YYYYMM-XXXX
-  
+  id          String @id @default(uuid())
+  orderNumber String @unique // Auto-generated: ORD-YYYYMM-XXXX
+
   // Link to indent
-  indentId        String   @unique
-  indent          Indent   @relation(fields: [indentId], references: [id])
-  
+  indentId String @unique
+  indent   Indent @relation(fields: [indentId], references: [id])
+
   // Vendor information (entered after offline procurement)
-  vendorName      String
-  vendorContact   String?
-  vendorEmail     String?
-  vendorAddress   String?
-  
+  vendorName             String
+  vendorContact          String?
+  vendorEmail            String?
+  vendorAddress          String?
+  vendorGstNo            String? // GST Number
+  vendorContactPerson    String? // Contact person name at vendor
+  vendorContactPhone     String? // Contact person phone
+  vendorNatureOfBusiness String? // Nature of business
+
   // Pricing (ONLY visible to Purchase Team and Director)
-  totalAmount     Float?
-  taxAmount       Float?
-  shippingAmount  Float?
-  grandTotal      Float?
-  
+  totalAmount    Float?
+  taxAmount      Float?
+  shippingAmount Float?
+  grandTotal     Float?
+
   // Delivery information
   expectedDeliveryDate DateTime?
   actualDeliveryDate   DateTime?
-  deliveryStatus       String    @default("PENDING")  // PENDING, IN_TRANSIT, DELIVERED
-  
+  deliveryStatus       String    @default("PENDING") // PENDING, IN_TRANSIT, DELIVERED
+
+  // Purchase status
+  isPurchased Boolean   @default(false) // True when PT marks as purchased
+  purchasedAt DateTime?
+
+  // Reorder info (for partial/damage reorders)
+  isReorder           Boolean   @default(false)
+  reorderedAt         DateTime?
+  reorderExpectedDate DateTime?
+  reorderReason       String?
+
   // Order creator (Purchase Team member)
-  createdById     String
-  createdBy       User     @relation("OrderCreator", fields: [createdById], references: [id])
-  
+  createdById String
+  createdBy   User   @relation("OrderCreator", fields: [createdById], references: [id])
+
   // Notes
-  remarks         String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  orderItems      OrderItem[]
-  
+  orderItems OrderItem[]
+  invoices   OrderInvoice[]
+
   @@index([orderNumber])
   @@index([indentId])
+  @@index([isPurchased])
   @@index([createdAt])
 }
 
 model OrderItem {
-  id              String   @id @default(uuid())
-  
-  orderId         String
-  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   // Material details (copied from indent item for reference)
-  materialName    String
-  materialCode    String
-  specifications  Json?
-  
-  quantity        Float
-  unitPrice       Float?   // ONLY visible to Purchase Team and Director
-  totalPrice      Float?   // ONLY visible to Purchase Team and Director
-  
+  materialName   String
+  materialCode   String
+  specifications Json?
+
+  quantity   Float
+  unitPrice  Float? // ONLY visible to Purchase Team and Director
+  totalPrice Float? // ONLY visible to Purchase Team and Director
+
+  // Vendor details per item (optional, can override order-level vendor)
+  vendorName             String?
+  vendorAddress          String?
+  vendorGstNo            String?
+  vendorContactPerson    String?
+  vendorContactPhone     String?
+  vendorNatureOfBusiness String?
+
+  // Relations
+  invoices OrderItemInvoice[]
+
   @@index([orderId])
+}
+
+// Invoice attached to an order
+model OrderInvoice {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  name         String // User-provided name for the invoice
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String // Storage path
+
+  uploadedAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// Invoice attached to a specific order item (material)
+model OrderItemInvoice {
+  id String @id @default(uuid())
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  name         String
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+
+  uploadedAt DateTime @default(now())
+
+  @@index([orderItemId])
 }
 
 // ============================================================================
@@ -424,64 +509,71 @@ model OrderItem {
 // ============================================================================
 
 model Receipt {
-  id              String   @id @default(uuid())
-  receiptNumber   String   @unique  // Auto-generated: RCP-SITE-YYYYMM-XXXX
-  
-  // Link to order/indent
-  indentId        String
-  
+  id            String  @id @default(uuid())
+  receiptNumber String  @unique // Auto-generated: RCP-SITE-YYYYMM-XXXX
+  name          String? // User-provided name for the receipt
+
+  // Link to indent
+  indentId String
+  indent   Indent @relation(fields: [indentId], references: [id])
+
+  // Site for easier filtering
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id])
+
   // Receipt creator (Site Engineer)
-  createdById     String
-  createdBy       User     @relation("ReceiptCreator", fields: [createdById], references: [id])
-  
+  createdById String
+  createdBy   User   @relation("ReceiptCreator", fields: [createdById], references: [id])
+
   // Receipt details
-  receivedDate    DateTime @default(now())
-  deliveryNote    String?
-  remarks         String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  receivedDate DateTime @default(now())
+  deliveryNote String?
+  remarks      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  items           ReceiptItem[]
-  images          ReceiptImage[]
-  
+  items  ReceiptItem[]
+  images ReceiptImage[]
+
   @@index([receiptNumber])
   @@index([indentId])
+  @@index([siteId])
   @@index([createdAt])
 }
 
 model ReceiptItem {
-  id              String   @id @default(uuid())
-  
-  receiptId       String
-  receipt         Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  
-  indentItemId    String
-  indentItem      IndentItem @relation(fields: [indentItemId], references: [id])
-  
-  receivedQty     Float
-  isComplete      Boolean  @default(false)  // True if this completes the item
-  remarks         String?
-  
+  id String @id @default(uuid())
+
+  receiptId String
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  indentItemId String
+  indentItem   IndentItem @relation(fields: [indentItemId], references: [id])
+
+  receivedQty Float
+  isComplete  Boolean @default(false) // True if this completes the item
+  remarks     String?
+
   @@index([receiptId])
   @@index([indentItemId])
 }
 
 model ReceiptImage {
-  id              String   @id @default(uuid())
-  
-  receiptId       String
-  receipt         Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  
-  filename        String
-  originalName    String
-  mimeType        String
-  size            Int
-  path            String   // Storage path
-  
-  uploadedAt      DateTime @default(now())
-  
+  id String @id @default(uuid())
+
+  receiptId String
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String // Storage path
+
+  uploadedAt DateTime @default(now())
+
   @@index([receiptId])
 }
 
@@ -490,90 +582,109 @@ model ReceiptImage {
 // ============================================================================
 
 model DamageReport {
-  id              String   @id @default(uuid())
-  
-  // Link to indent (for overview) and optionally a specific item
-  indentId        String              // Parent indent for easier querying
-  indentItemId    String?
-  indentItem      IndentItem? @relation(fields: [indentItemId], references: [id])
-  
+  id String @id @default(uuid())
+
+  // Link to indent and optionally a specific item
+  indentId     String // Parent indent for easier querying
+  indent       Indent      @relation(fields: [indentId], references: [id])
+  indentItemId String?
+  indentItem   IndentItem? @relation(fields: [indentItemId], references: [id])
+
+  // Site for easier filtering
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id])
+
   // Reporter (Site Engineer)
-  reportedById    String
-  reportedBy      User     @relation("DamageReporter", fields: [reportedById], references: [id])
-  
+  reportedById String
+  reportedBy   User   @relation("DamageReporter", fields: [reportedById], references: [id])
+
   // Damage details
-  name            String              // User-provided name for this damage
-  damagedQty      Float?
-  description     String
-  severity        String   @default("MODERATE")  // MINOR, MODERATE, SEVERE
-  
+  name        String // User-provided name for this damage
+  damagedQty  Float?
+  description String
+  severity    String @default("MODERATE") // MINOR, MODERATE, SEVERE
+
   // Status (draft vs reported)
-  status          DamageStatus @default(DRAFT)
-  submittedAt     DateTime?           // When damage was actually reported
-  
+  status      DamageStatus @default(DRAFT)
+  submittedAt DateTime? // When damage was actually reported
+
   // Resolution
-  isResolved      Boolean  @default(false)
-  resolvedAt      DateTime?
-  resolution      String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  isResolved Boolean   @default(false)
+  resolvedAt DateTime?
+  resolution String?
+
+  // Reorder tracking (for Purchase Team)
+  isReordered         Boolean   @default(false)
+  reorderedAt         DateTime?
+  reorderExpectedDate DateTime?
+  reorderedById       String?
+  reorderedBy         User?     @relation("DamageReorderer", fields: [reorderedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  return          Return?
-  images          DamageImage[]
-  
+  return Return?
+  images DamageImage[]
+
   @@index([indentId])
   @@index([indentItemId])
+  @@index([siteId])
   @@index([status])
   @@index([isResolved])
 }
 
 model DamageImage {
-  id              String   @id @default(uuid())
-  
-  damageReportId  String
-  damageReport    DamageReport @relation(fields: [damageReportId], references: [id], onDelete: Cascade)
-  
-  filename        String
-  originalName    String
-  mimeType        String
-  size            Int
-  path            String
-  
-  uploadedAt      DateTime @default(now())
-  
+  id String @id @default(uuid())
+
+  damageReportId String
+  damageReport   DamageReport @relation(fields: [damageReportId], references: [id], onDelete: Cascade)
+
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+
+  uploadedAt DateTime @default(now())
+
   @@index([damageReportId])
 }
 
 model Return {
-  id              String       @id @default(uuid())
-  returnNumber    String       @unique  // Auto-generated: RET-SITE-YYYYMM-XXXX
-  
+  id           String @id @default(uuid())
+  returnNumber String @unique // Auto-generated: RET-SITE-YYYYMM-XXXX
+
   // Link to damage report
-  damageReportId  String       @unique
-  damageReport    DamageReport @relation(fields: [damageReportId], references: [id])
-  
+  damageReportId String       @unique
+  damageReport   DamageReport @relation(fields: [damageReportId], references: [id])
+
+  // Site for easier filtering
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id])
+
   // Return creator (Site Engineer)
-  createdById     String
-  createdBy       User         @relation("ReturnCreator", fields: [createdById], references: [id])
-  
-  status          ReturnStatus @default(PENDING)
-  
+  createdById String
+  createdBy   User   @relation("ReturnCreator", fields: [createdById], references: [id])
+
+  status ReturnStatus @default(PENDING)
+
   // Return details
-  quantity        Float
-  reason          String
-  
+  quantity Float
+  reason   String
+
   // Processing
-  approvedById    String?
-  approvedAt      DateTime?
-  processedAt     DateTime?
-  remarks         String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  approvedById String?
+  approvedBy   User?     @relation("ReturnApprover", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  processedAt  DateTime?
+  remarks      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([returnNumber])
+  @@index([siteId])
   @@index([status])
 }
 
@@ -582,28 +693,28 @@ model Return {
 // ============================================================================
 
 model Notification {
-  id              String           @id @default(uuid())
-  type            NotificationType
-  
+  id   String           @id @default(uuid())
+  type NotificationType
+
   // Recipient
-  userId          String
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Content
-  title           String
-  message         String
-  data            Json?            // Additional data for navigation
-  
+  title   String
+  message String
+  data    Json? // Additional data for navigation
+
   // Related entity
-  indentId        String?
-  indent          Indent?          @relation(fields: [indentId], references: [id], onDelete: SetNull)
-  
+  indentId String?
+  indent   Indent? @relation(fields: [indentId], references: [id], onDelete: SetNull)
+
   // Status
-  isRead          Boolean          @default(false)
-  readAt          DateTime?
-  
-  createdAt       DateTime         @default(now())
-  
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
@@ -614,34 +725,34 @@ model Notification {
 // ============================================================================
 
 model AuditLog {
-  id              String   @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Actor
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
   // Action
-  action          String   // e.g., "INDENT_CREATED", "INDENT_APPROVED", "ORDER_PLACED"
-  entityType      String   // e.g., "INDENT", "ORDER", "RECEIPT"
-  entityId        String
-  
+  action     String // e.g., "INDENT_CREATED", "INDENT_APPROVED", "ORDER_PLACED"
+  entityType String // e.g., "INDENT", "ORDER", "RECEIPT"
+  entityId   String
+
   // State change
-  previousState   String?
-  newState        String?
-  
+  previousState String?
+  newState      String?
+
   // Additional metadata
-  metadata        Json?
-  
+  metadata Json?
+
   // IP and device info
-  ipAddress       String?
-  userAgent       String?
-  
+  ipAddress String?
+  userAgent String?
+
   // Related indent for easier querying
-  indentId        String?
-  indent          Indent?  @relation(fields: [indentId], references: [id], onDelete: SetNull)
-  
-  createdAt       DateTime @default(now())
-  
+  indentId String?
+  indent   Indent? @relation(fields: [indentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([action])
   @@index([entityType, entityId])

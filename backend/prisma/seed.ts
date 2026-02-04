@@ -239,6 +239,276 @@ async function main() {
     ]);
     console.log(`✅ Created ${materials.length} sample materials\n`);
 
+    // Create sample indents with different statuses
+    console.log('📝 Creating sample indents...');
+    
+    // Get engineer user for creating indents
+    const engineer = users.find(u => u.role === Role.SITE_ENGINEER);
+    const purchaseUser = users.find(u => u.role === Role.PURCHASE_TEAM);
+    const directorUser = users.find(u => u.role === Role.DIRECTOR);
+    
+    if (engineer) {
+        // Indent 1: Submitted status
+        const indent1 = await prisma.indent.create({
+            data: {
+                indentNumber: 'IND-MUM-2024-001',
+                name: 'Foundation Materials',
+                status: 'SUBMITTED',
+                priority: 'HIGH',
+                createdById: engineer.id,
+                siteId: sites[0].id,
+                items: {
+                    create: [
+                        {
+                            materialId: materials[0].id, // Cement
+                            requestedQty: 50,
+                            pendingQty: 50,
+                        },
+                        {
+                            materialId: materials[1].id, // Steel
+                            requestedQty: 500,
+                            pendingQty: 500,
+                        },
+                    ],
+                },
+            },
+        });
+
+        // Indent 2: Purchase Approved status
+        const indent2 = await prisma.indent.create({
+            data: {
+                indentNumber: 'IND-MUM-2024-002',
+                name: 'Electrical Installation Phase 1',
+                status: 'PURCHASE_APPROVED',
+                priority: 'MEDIUM',
+                createdById: engineer.id,
+                siteId: sites[0].id,
+                purchaseApprovedById: purchaseUser?.id,
+                purchaseApprovedAt: new Date(),
+                items: {
+                    create: [
+                        {
+                            materialId: materials[3].id, // Electrical Wire
+                            requestedQty: 1000,
+                            pendingQty: 1000,
+                        },
+                    ],
+                },
+            },
+        });
+
+        // Indent 3: Director Approved (ready for purchase)
+        const indent3 = await prisma.indent.create({
+            data: {
+                indentNumber: 'IND-MUM-2024-003',
+                name: 'Plumbing Materials',
+                status: 'DIRECTOR_APPROVED',
+                priority: 'HIGH',
+                createdById: engineer.id,
+                siteId: sites[0].id,
+                purchaseApprovedById: purchaseUser?.id,
+                purchaseApprovedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+                directorApprovedById: directorUser?.id,
+                directorApprovedAt: new Date(),
+                items: {
+                    create: [
+                        {
+                            materialId: materials[4].id, // PVC Pipe
+                            requestedQty: 200,
+                            pendingQty: 200,
+                        },
+                    ],
+                },
+            },
+        });
+
+        // Indent 4: Order Placed status
+        const indent4 = await prisma.indent.create({
+            data: {
+                indentNumber: 'IND-MUM-2024-004',
+                name: 'Hardware for Doors',
+                status: 'ORDER_PLACED',
+                priority: 'MEDIUM',
+                createdById: engineer.id,
+                siteId: sites[0].id,
+                purchaseApprovedById: purchaseUser?.id,
+                purchaseApprovedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+                directorApprovedById: directorUser?.id,
+                directorApprovedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+                items: {
+                    create: [
+                        {
+                            materialId: materials[2].id, // Door Hinges
+                            requestedQty: 100,
+                            pendingQty: 100,
+                        },
+                    ],
+                },
+                order: {
+                    create: {
+                        orderNumber: 'ORD-2024-001',
+                        vendorName: 'Hardware World Ltd',
+                        vendorContact: '+91 98765 43210',
+                        vendorEmail: 'sales@hardwareworld.com',
+                        vendorAddress: 'Industrial Area, Mumbai',
+                        expectedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+                        totalAmount: 15000,
+                        remarks: 'Standard delivery',
+                        createdById: purchaseUser?.id || engineer.id,
+                        isPurchased: true,
+                        purchasedAt: new Date(),
+                        orderItems: {
+                            create: [{
+                                materialName: 'Door Hinges 4 inch',
+                                materialCode: 'MAT-003',
+                                quantity: 100,
+                                unitPrice: 150,
+                                totalPrice: 15000,
+                            }],
+                        },
+                    },
+                },
+            },
+        });
+
+        // Indent 5: Closed status
+        const indent5 = await prisma.indent.create({
+            data: {
+                indentNumber: 'IND-MUM-2024-005',
+                name: 'Cement for Second Floor',
+                status: 'CLOSED',
+                priority: 'HIGH',
+                createdById: engineer.id,
+                siteId: sites[0].id,
+                purchaseApprovedById: purchaseUser?.id,
+                purchaseApprovedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+                directorApprovedById: directorUser?.id,
+                directorApprovedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+                items: {
+                    create: [
+                        {
+                            materialId: materials[0].id, // Cement
+                            requestedQty: 100,
+                            receivedQty: 100,
+                            pendingQty: 0,
+                            arrivalStatus: 'ARRIVED',
+                        },
+                    ],
+                },
+                order: {
+                    create: {
+                        orderNumber: 'ORD-2024-002',
+                        vendorName: 'UltraTech Cement',
+                        vendorContact: '+91 98765 11111',
+                        expectedDeliveryDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+                        totalAmount: 35000,
+                        createdById: purchaseUser?.id || engineer.id,
+                        isPurchased: true,
+                        purchasedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+                        orderItems: {
+                            create: [{
+                                materialName: 'Portland Cement OPC 53',
+                                materialCode: 'MAT-001',
+                                quantity: 100,
+                                unitPrice: 350,
+                                totalPrice: 35000,
+                            }],
+                        },
+                    },
+                },
+            },
+        });
+
+        // Create receipt for indent 5
+        await prisma.receipt.create({
+            data: {
+                receiptNumber: 'REC-MUM-2024-001',
+                name: 'Cement Delivery Receipt',
+                indentId: indent5.id,
+                createdById: engineer.id,
+                siteId: sites[0].id,
+            },
+        });
+
+        // Indent 6: Order Placed with damage report
+        const indent6 = await prisma.indent.create({
+            data: {
+                indentNumber: 'IND-MUM-2024-006',
+                name: 'Steel for Columns',
+                status: 'ORDER_PLACED',
+                priority: 'HIGH',
+                createdById: engineer.id,
+                siteId: sites[0].id,
+                purchaseApprovedById: purchaseUser?.id,
+                purchaseApprovedAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+                directorApprovedById: directorUser?.id,
+                directorApprovedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+                items: {
+                    create: [
+                        {
+                            materialId: materials[1].id, // Steel
+                            requestedQty: 2000,
+                            receivedQty: 1800,
+                            pendingQty: 200,
+                            arrivalStatus: 'PARTIAL',
+                        },
+                    ],
+                },
+                order: {
+                    create: {
+                        orderNumber: 'ORD-2024-003',
+                        vendorName: 'Tata Steel Ltd',
+                        vendorContact: '+91 98765 22222',
+                        expectedDeliveryDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+                        totalAmount: 120000,
+                        createdById: purchaseUser?.id || engineer.id,
+                        isPurchased: true,
+                        purchasedAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
+                        orderItems: {
+                            create: [{
+                                materialName: 'TMT Steel Bars 12mm',
+                                materialCode: 'MAT-002',
+                                quantity: 2000,
+                                unitPrice: 60,
+                                totalPrice: 120000,
+                            }],
+                        },
+                    },
+                },
+            },
+        });
+
+        // Create damage report for indent 6 (DRAFT)
+        await prisma.damageReport.create({
+            data: {
+                name: 'Rust damage on steel bars',
+                description: 'Some steel bars arrived with rust damage',
+                severity: 'MODERATE',
+                status: 'DRAFT',
+                indentId: indent6.id,
+                reportedById: engineer.id,
+                siteId: sites[0].id,
+            },
+        });
+
+        // Create damage report for indent 6 (REPORTED)
+        await prisma.damageReport.create({
+            data: {
+                name: 'Bent steel bars',
+                description: 'Steel bars bent during transportation',
+                severity: 'SEVERE',
+                status: 'REPORTED',
+                indentId: indent6.id,
+                reportedById: engineer.id,
+                siteId: sites[0].id,
+                submittedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+            },
+        });
+
+        console.log('✅ Created 6 sample indents with various statuses\n');
+        console.log('✅ Created 1 receipt and 2 damage reports\n');
+    }
+
     console.log('='.repeat(50));
     console.log('🎉 Database seeding completed!');
     console.log('='.repeat(50));
@@ -246,6 +516,14 @@ async function main() {
     console.log('  Director:  director@indense.com / password123');
     console.log('  Purchase:  purchase@indense.com / password123');
     console.log('  Engineer:  engineer1@indense.com / password123');
+    console.log('\nSample Data:');
+    console.log('  - 3 Sites (Mumbai, Delhi, Bangalore)');
+    console.log('  - 5 Item Groups');
+    console.log('  - 5 Units of Measure');
+    console.log('  - 5 Materials');
+    console.log('  - 6 Indents with different statuses');
+    console.log('  - 1 Receipt');
+    console.log('  - 2 Damage Reports (1 Draft, 1 Reported)');
     console.log('');
 }
 

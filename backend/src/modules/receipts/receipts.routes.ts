@@ -5,7 +5,7 @@ import { receiptsController } from './receipts.controller';
 import { authenticate } from '../../middleware/authenticate';
 import { requireSiteEngineer } from '../../middleware/authorize';
 import { validateRequest } from '../../middleware/validateRequest';
-import { createReceiptValidation } from './receipts.validation';
+import { createReceiptValidation, uploadReceiptImageValidation, deleteReceiptValidation } from './receipts.validation';
 import { storageConfig } from '../../config/storage';
 
 const storage = multer.diskStorage({
@@ -33,7 +33,14 @@ const router = Router();
 
 router.use(authenticate);
 
+// List all receipts
 router.get('/', receiptsController.findAll.bind(receiptsController));
+
+// Get receipts for a specific indent
+router.get('/indent/:indentId', receiptsController.findByIndentId.bind(receiptsController));
+
+// Get single receipt by ID
+router.get('/:id', receiptsController.findById.bind(receiptsController));
 
 // Site Engineer creates receipts
 router.post(
@@ -43,11 +50,28 @@ router.post(
     receiptsController.create.bind(receiptsController)
 );
 
+// Upload image to receipt
 router.post(
     '/:id/images',
     requireSiteEngineer,
+    validateRequest(uploadReceiptImageValidation),
     upload.single('image'),
     receiptsController.uploadImage.bind(receiptsController)
+);
+
+// Delete receipt
+router.delete(
+    '/:id',
+    requireSiteEngineer,
+    validateRequest(deleteReceiptValidation),
+    receiptsController.deleteReceipt.bind(receiptsController)
+);
+
+// Delete receipt image
+router.delete(
+    '/:id/images/:imageId',
+    requireSiteEngineer,
+    receiptsController.deleteImage.bind(receiptsController)
 );
 
 export default router;

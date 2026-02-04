@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -10,9 +10,12 @@ import {
     Modal,
     TextInput,
     FlatList,
+    RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { usersApi, User } from '../../../../../src/api/users.api';
+import { sitesApi } from '../../../../../src/api/sites.api';
 
 const theme = {
     colors: {
@@ -25,63 +28,64 @@ const theme = {
         accent: '#3B82F6',
         success: '#10B981',
         error: '#EF4444',
+        warning: '#F59E0B',
+        purple: '#8B5CF6',
     }
 };
 
-interface PurchaseMember {
+interface SiteOption {
     id: string;
     name: string;
-    email: string;
-    phone: string;
-    dob: string;
-    assignedSites?: { id: string; name: string }[];
-}
-
-interface Site {
-    id: string;
-    name: string;
-    selected: boolean;
+    code: string;
 }
 
 export default function PurchaseMemberDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const [member, setMember] = useState<PurchaseMember | null>(null);
+    const [member, setMember] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
-    const [showSitePicker, setShowSitePicker] = useState(false);
+    const [showDemotePicker, setShowDemotePicker] = useState(false);
     const [confirmText, setConfirmText] = useState('');
-    const [sites, setSites] = useState<Site[]>([]);
+    const [sites, setSites] = useState<SiteOption[]>([]);
+    const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
 
-    useEffect(() => {
-        fetchMember();
-    }, [id]);
-
-    const fetchMember = async () => {
+    const fetchMember = useCallback(async () => {
+        if (!id) return;
         try {
-            // TODO: Replace with actual API call
-            setMember({
-                id: id!,
-                name: 'Vikram Singh',
-                email: 'vikram@example.com',
-                phone: '+91 98765 12345',
-                dob: '1985-08-22',
-                assignedSites: [],
-            });
-            setSites([
-                { id: '1', name: 'Green Valley Residences', selected: false },
-                { id: '2', name: 'Skyline Towers', selected: false },
-                { id: '3', name: 'Riverside Complex', selected: false },
-            ]);
+            const data = await usersApi.getById(id);
+            setMember(data);
         } catch (error) {
             console.error('Failed to fetch member:', error);
             Alert.alert('Error', 'Failed to load member details');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    };
+    }, [id]);
 
-    const formatDate = (dateStr: string) => {
+    const fetchSites = useCallback(async () => {
+        try {
+            const response = await sitesApi.getAll();
+            setSites(response.data.filter(s => !s.isClosed));
+        } catch (error) {
+            console.error('Failed to fetch sites:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchMember();
+    }, [fetchMember]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchMember();
+    }, [fetchMember]);
+
+    const formatDate = (dateStr: string | null | undefined) => {
+        if (!dateStr) return '-';
         return new Date(dateStr).toLocaleDateString('en-IN', {
             day: '2-digit',
             month: 'long',
@@ -89,59 +93,104 @@ export default function PurchaseMemberDetail() {
         });
     };
 
-    const toggleSite = (siteId: string) => {
-        setSites(sites.map(s => s.id === siteId ? { ...s, selected: !s.selected } : s));
+    const handlePromote = async () => {
+        if (!member) return;
+        Alert.alert(
+            'Promote to Director',
+            `Are you sure you want to promote ${member.name} to Director?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Promote',
+                    onPress: async () => {
+                        setActionLoading(true);
+                        try {
+                            const updated = await usersApi.promote(member.id);
+                            setMember(updated);
+                            Alert.alert('Success', `${member.name} has been promoted to Director`, [
+                                { text: 'OK', onPress: () => router.back() }
+                            ]);
+                        } catch (error: any) {
+                            Alert.alert('Error', error?.message || 'Failed to promote');
+                        } finally {
+                            setActionLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
-    const handleAssignAsSE = () => {
-        const selectedSites = sites.filter(s => s.selected);
-        if (selectedSites.length === 0) {
-            Alert.alert('Error', 'Please select at least one site');
+    const openDemotePicker = async () => {
+        await fetchSites();
+        setShowDemotePicker(true);
+    };
+
+    const handleDemote = async () => {
+        if (!member || !selectedSiteId) {
+            Alert.alert('Error', 'Please select a site to assign');
             return;
         }
-        Alert.alert(
-            'Assign as Site Engineer',
-            `Assign ${member?.name} to ${selectedSites.length} site(s)?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Assign',
-                    onPress: () => {
-                        setMember(prev => prev ? { ...prev, assignedSites: selectedSites.map(s => ({ id: s.id, name: s.name })) } : null);
-                        setShowSitePicker(false);
-                        Alert.alert('Success', `${member?.name} has been assigned as Site Engineer`);
-                    }
-                }
-            ]
-        );
+        setActionLoading(true);
+        try {
+            const updated = await usersApi.demote(member.id, selectedSiteId);
+            setMember(updated);
+            setShowDemotePicker(false);
+            Alert.alert('Success', `${member.name} has been demoted to Site Engineer`, [
+                { text: 'OK', onPress: () => router.back() }
+            ]);
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to demote');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
-    const handleRemoveSEAccess = () => {
-        Alert.alert(
-            'Remove Site Engineer Access',
-            `Remove ${member?.name}'s Site Engineer access?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Remove',
-                    onPress: () => {
-                        setMember(prev => prev ? { ...prev, assignedSites: [] } : null);
-                        setSites(sites.map(s => ({ ...s, selected: false })));
-                        Alert.alert('Success', 'Site Engineer access removed');
-                    }
-                }
-            ]
-        );
-    };
-
-    const handleRevoke = () => {
-        if (confirmText.toLowerCase() !== member?.name.toLowerCase()) {
+    const handleRevoke = async () => {
+        if (!member) return;
+        if (confirmText.toLowerCase() !== member.name.toLowerCase()) {
             Alert.alert('Error', 'Please type the member\'s name correctly to confirm');
             return;
         }
-        Alert.alert('Success', `${member?.name}'s access has been revoked`, [
-            { text: 'OK', onPress: () => router.back() }
-        ]);
+        setActionLoading(true);
+        try {
+            await usersApi.revoke(member.id);
+            Alert.alert('Success', `${member.name}'s access has been revoked`, [
+                { text: 'OK', onPress: () => router.back() }
+            ]);
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to revoke access');
+        } finally {
+            setActionLoading(false);
+            setShowRevokeConfirm(false);
+            setConfirmText('');
+        }
+    };
+
+    const handleRestore = async () => {
+        if (!member) return;
+        Alert.alert(
+            'Restore Access',
+            `Are you sure you want to restore ${member.name}'s access?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Restore',
+                    onPress: async () => {
+                        setActionLoading(true);
+                        try {
+                            const updated = await usersApi.restore(member.id);
+                            setMember(updated);
+                            Alert.alert('Success', `${member.name}'s access has been restored`);
+                        } catch (error: any) {
+                            Alert.alert('Error', error?.message || 'Failed to restore access');
+                        } finally {
+                            setActionLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     if (loading) {
@@ -160,19 +209,31 @@ export default function PurchaseMemberDetail() {
         );
     }
 
-    const hasSEAccess = member.assignedSites && member.assignedSites.length > 0;
-
     return (
         <View style={styles.container}>
-            <ScrollView style={styles.scrollView}>
+            <ScrollView 
+                style={styles.scrollView}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+            >
                 {/* Profile Card */}
                 <View style={styles.profileCard}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{member.name.charAt(0)}</Text>
+                    <View style={[styles.avatar, member.isRevoked && styles.revokedAvatar]}>
+                        <Text style={[styles.avatarText, member.isRevoked && styles.revokedAvatarText]}>
+                            {member.name.charAt(0)}
+                        </Text>
                     </View>
                     <Text style={styles.name}>{member.name}</Text>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>Purchase Team</Text>
+                    <View style={styles.badgeRow}>
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>Purchase Team</Text>
+                        </View>
+                        {member.isRevoked && (
+                            <View style={styles.revokedBadge}>
+                                <Text style={styles.revokedBadgeText}>Revoked</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 
@@ -186,11 +247,15 @@ export default function PurchaseMemberDetail() {
                         </View>
                         <View style={styles.infoRow}>
                             <Text style={styles.infoLabel}>Phone</Text>
-                            <Text style={styles.infoValue}>{member.phone}</Text>
+                            <Text style={styles.infoValue}>{member.phone || '-'}</Text>
                         </View>
                         <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>Date of Birth</Text>
-                            <Text style={styles.infoValue}>{formatDate(member.dob)}</Text>
+                            <Text style={styles.infoLabel}>Joined</Text>
+                            <Text style={styles.infoValue}>{formatDate(member.createdAt)}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Last Login</Text>
+                            <Text style={styles.infoValue}>{formatDate(member.lastLoginAt)}</Text>
                         </View>
                     </View>
                 </View>
@@ -199,62 +264,93 @@ export default function PurchaseMemberDetail() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Actions</Text>
 
-                    {!hasSEAccess ? (
-                        <TouchableOpacity style={styles.assignButton} onPress={() => setShowSitePicker(true)}>
-                            <Ionicons name="construct" size={22} color={theme.colors.success} />
-                            <Text style={styles.assignButtonText}>Assign as Site Engineer</Text>
+                    {member.isRevoked ? (
+                        <TouchableOpacity style={styles.restoreButton} onPress={handleRestore} disabled={actionLoading}>
+                            {actionLoading ? (
+                                <ActivityIndicator size="small" color={theme.colors.success} />
+                            ) : (
+                                <>
+                                    <Ionicons name="refresh-circle" size={22} color={theme.colors.success} />
+                                    <Text style={styles.restoreButtonText}>Restore Access</Text>
+                                </>
+                            )}
                         </TouchableOpacity>
                     ) : (
                         <>
-                            <View style={styles.assignedSitesCard}>
-                                <Text style={styles.assignedLabel}>Assigned Sites:</Text>
-                                {member.assignedSites?.map(site => (
-                                    <Text key={site.id} style={styles.assignedSite}>• {site.name}</Text>
-                                ))}
-                            </View>
-                            <TouchableOpacity style={styles.removeButton} onPress={handleRemoveSEAccess}>
-                                <Ionicons name="close-circle" size={22} color={theme.colors.textSecondary} />
-                                <Text style={styles.removeButtonText}>Remove Site Engineer Access</Text>
+                            <TouchableOpacity style={styles.promoteButton} onPress={handlePromote} disabled={actionLoading}>
+                                {actionLoading ? (
+                                    <ActivityIndicator size="small" color={theme.colors.purple} />
+                                ) : (
+                                    <>
+                                        <Ionicons name="arrow-up-circle" size={22} color={theme.colors.purple} />
+                                        <Text style={styles.promoteButtonText}>Promote to Director</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.demoteButton} onPress={openDemotePicker} disabled={actionLoading}>
+                                <Ionicons name="arrow-down-circle" size={22} color={theme.colors.warning} />
+                                <Text style={styles.demoteButtonText}>Demote to Site Engineer</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.revokeButton} onPress={() => setShowRevokeConfirm(true)} disabled={actionLoading}>
+                                <Ionicons name="ban" size={22} color={theme.colors.error} />
+                                <Text style={styles.revokeButtonText}>Revoke from Team</Text>
                             </TouchableOpacity>
                         </>
                     )}
-
-                    <TouchableOpacity style={styles.revokeButton} onPress={() => setShowRevokeConfirm(true)}>
-                        <Ionicons name="ban" size={22} color={theme.colors.error} />
-                        <Text style={styles.revokeButtonText}>Revoke from Team</Text>
-                    </TouchableOpacity>
                 </View>
 
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* Site Picker Modal */}
-            <Modal visible={showSitePicker} animationType="slide" presentationStyle="pageSheet">
+            {/* Demote Site Picker Modal */}
+            <Modal visible={showDemotePicker} animationType="slide" presentationStyle="pageSheet">
                 <View style={styles.modal}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Select Sites</Text>
-                        <TouchableOpacity onPress={() => setShowSitePicker(false)}>
+                        <Text style={styles.modalTitle}>Select Site for Assignment</Text>
+                        <TouchableOpacity onPress={() => { setShowDemotePicker(false); setSelectedSiteId(null); }}>
                             <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
                         </TouchableOpacity>
                     </View>
+                    <Text style={styles.modalSubtitle}>
+                        When demoting to Site Engineer, you must assign them to a site.
+                    </Text>
                     <FlatList
                         data={sites}
                         keyExtractor={item => item.id}
                         contentContainerStyle={{ padding: 16 }}
                         renderItem={({ item }) => (
-                            <TouchableOpacity style={styles.siteOption} onPress={() => toggleSite(item.id)}>
+                            <TouchableOpacity 
+                                style={[styles.siteOption, selectedSiteId === item.id && styles.siteOptionSelected]} 
+                                onPress={() => setSelectedSiteId(item.id)}
+                            >
                                 <Ionicons
-                                    name={item.selected ? "checkbox" : "square-outline"}
+                                    name={selectedSiteId === item.id ? "radio-button-on" : "radio-button-off"}
                                     size={24}
-                                    color={item.selected ? theme.colors.success : theme.colors.textSecondary}
+                                    color={selectedSiteId === item.id ? theme.colors.primary : theme.colors.textSecondary}
                                 />
-                                <Text style={styles.siteOptionText}>{item.name}</Text>
+                                <View style={styles.siteOptionContent}>
+                                    <Text style={styles.siteOptionText}>{item.name}</Text>
+                                    <Text style={styles.siteOptionCode}>{item.code}</Text>
+                                </View>
                             </TouchableOpacity>
                         )}
+                        ListEmptyComponent={
+                            <Text style={styles.noSites}>No active sites available</Text>
+                        }
                     />
                     <View style={styles.modalFooter}>
-                        <TouchableOpacity style={styles.assignModalButton} onPress={handleAssignAsSE}>
-                            <Text style={styles.assignModalButtonText}>Assign to Selected Sites</Text>
+                        <TouchableOpacity 
+                            style={[styles.demoteModalButton, !selectedSiteId && styles.buttonDisabled]} 
+                            onPress={handleDemote}
+                            disabled={!selectedSiteId || actionLoading}
+                        >
+                            {actionLoading ? (
+                                <ActivityIndicator size="small" color="#FFF" />
+                            ) : (
+                                <Text style={styles.demoteModalButtonText}>Demote to Site Engineer</Text>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -282,8 +378,16 @@ export default function PurchaseMemberDetail() {
                             <TouchableOpacity style={styles.confirmCancel} onPress={() => { setShowRevokeConfirm(false); setConfirmText(''); }}>
                                 <Text style={styles.confirmCancelText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.confirmRevoke} onPress={handleRevoke}>
-                                <Text style={styles.confirmRevokeText}>Revoke</Text>
+                            <TouchableOpacity 
+                                style={styles.confirmRevoke} 
+                                onPress={handleRevoke}
+                                disabled={actionLoading}
+                            >
+                                {actionLoading ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.confirmRevokeText}>Revoke</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -313,16 +417,27 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 12,
     },
+    revokedAvatar: {
+        backgroundColor: theme.colors.error + '20',
+    },
     avatarText: { fontSize: 32, fontWeight: '700', color: theme.colors.accent },
+    revokedAvatarText: { color: theme.colors.error },
     name: { fontSize: 24, fontWeight: '700', color: theme.colors.textPrimary },
+    badgeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
     badge: {
         backgroundColor: theme.colors.accent + '15',
         paddingHorizontal: 14,
         paddingVertical: 6,
         borderRadius: 12,
-        marginTop: 8,
     },
     badgeText: { fontSize: 13, fontWeight: '600', color: theme.colors.accent },
+    revokedBadge: {
+        backgroundColor: theme.colors.error + '15',
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    revokedBadgeText: { fontSize: 13, fontWeight: '600', color: theme.colors.error },
     section: { padding: 16 },
     sectionTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 12, textTransform: 'uppercase' },
     infoCard: {
@@ -339,7 +454,29 @@ const styles = StyleSheet.create({
     },
     infoLabel: { fontSize: 14, color: theme.colors.textSecondary },
     infoValue: { fontSize: 14, fontWeight: '500', color: theme.colors.textPrimary },
-    assignButton: {
+    promoteButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.purple + '15',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+        gap: 10,
+    },
+    promoteButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.purple },
+    demoteButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.warning + '15',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+        gap: 10,
+    },
+    demoteButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.warning },
+    restoreButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -349,26 +486,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         gap: 10,
     },
-    assignButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.success },
-    assignedSitesCard: {
-        backgroundColor: theme.colors.cardBg,
-        padding: 14,
-        borderRadius: 12,
-        marginBottom: 12,
-    },
-    assignedLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 8 },
-    assignedSite: { fontSize: 14, color: theme.colors.textPrimary, paddingVertical: 4 },
-    removeButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.border,
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-        gap: 10,
-    },
-    removeButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.textSecondary },
+    restoreButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.success },
     revokeButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -385,34 +503,43 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 16,
-        backgroundColor: theme.colors.cardBg,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
+        backgroundColor: theme.colors.cardBg,
     },
-    modalTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
+    modalTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary },
+    modalSubtitle: { 
+        fontSize: 14, 
+        color: theme.colors.textSecondary, 
+        padding: 16,
+        paddingBottom: 0,
+    },
     siteOption: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.cardBg,
         padding: 16,
+        backgroundColor: theme.colors.cardBg,
         borderRadius: 12,
         marginBottom: 8,
         gap: 12,
     },
-    siteOptionText: { fontSize: 15, color: theme.colors.textPrimary },
-    modalFooter: {
-        padding: 16,
-        backgroundColor: theme.colors.cardBg,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
+    siteOptionSelected: {
+        borderWidth: 2,
+        borderColor: theme.colors.primary,
     },
-    assignModalButton: {
-        backgroundColor: theme.colors.success,
+    siteOptionContent: { flex: 1 },
+    siteOptionText: { fontSize: 16, fontWeight: '500', color: theme.colors.textPrimary },
+    siteOptionCode: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
+    noSites: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', padding: 40 },
+    modalFooter: { padding: 16, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.cardBg },
+    demoteModalButton: {
+        backgroundColor: theme.colors.warning,
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',
     },
-    assignModalButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+    demoteModalButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+    buttonDisabled: { opacity: 0.5 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
     confirmModal: {
         backgroundColor: theme.colors.cardBg,

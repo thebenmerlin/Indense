@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import { useAuth } from '../../src/context';
 import { Role, ROLE_NAMES } from '../../src/constants';
 import NotificationCenter from '../../src/components/NotificationCenter';
 
@@ -26,29 +26,8 @@ const theme = {
 };
 
 export default function SiteEngineerDashboard() {
-    const [user, setUser] = useState<any>(null);
+    const { user, logout } = useAuth();
     const router = useRouter();
-
-    useEffect(() => {
-        loadUser();
-    }, []);
-
-    const loadUser = async () => {
-        try {
-            const userJson = await SecureStore.getItemAsync('auth_user');
-            if (userJson) setUser(JSON.parse(userJson));
-        } catch (e) {
-            console.warn('Failed to load user:', e);
-        }
-    };
-
-    const logout = async () => {
-        try {
-            await SecureStore.deleteItemAsync('auth_access_token');
-            await SecureStore.deleteItemAsync('auth_refresh_token');
-            await SecureStore.deleteItemAsync('auth_user');
-        } catch (e) { }
-    };
 
     const handleLogout = () => {
         Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -98,7 +77,7 @@ export default function SiteEngineerDashboard() {
                     <Text style={styles.greeting}>Welcome back,</Text>
                     <Text style={styles.name}>{user?.name || 'User'}</Text>
                     <Text style={styles.role}>
-                        {user?.role ? ROLE_NAMES[user.role] : 'Site Engineer'} • {user?.siteName || 'Site'}
+                        {user?.role ? ROLE_NAMES[user.role as Role] : 'Site Engineer'} • {user?.siteName || 'Site'}
                     </Text>
                 </View>
                 <View style={styles.headerActions}>

@@ -9,9 +9,10 @@ import {
     ActivityIndicator,
     TextInput,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { materialsApi, Material, MaterialCategory } from '../../../../src/api/materials.api';
 
 const theme = {
     colors: {
@@ -25,82 +26,90 @@ const theme = {
     }
 };
 
-interface Material {
-    id: string;
-    name: string;
-    specification: string;
-    dimensions: string;
-    color: string;
-    category: string;
-    unit: string;
-}
-
-const CATEGORIES = ['All', 'Structural', 'Plumbing', 'Electrical', 'Finishing', 'Hardware', 'Other'];
-
 export default function MaterialsList() {
     const [materials, setMaterials] = useState<Material[]>([]);
-    const [filteredMaterials, setFilteredMaterials] = useState<Material[]>([]);
+    const [categories, setCategories] = useState<MaterialCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState('name');
-    const [category, setCategory] = useState('All');
+    const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
+    const [selectedCategory, setSelectedCategory] = useState<string>('');
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const router = useRouter();
 
-    const fetchMaterials = useCallback(async () => {
+    // Fetch categories on mount
+    useEffect(() => {
+        const loadCategories = async () => {
+            try {
+                const data = await materialsApi.getCategories();
+                setCategories(data);
+            } catch (error) {
+                console.error('Failed to fetch categories:', error);
+            }
+        };
+        loadCategories();
+    }, []);
+
+    const fetchMaterials = useCallback(async (resetPage = true) => {
         try {
-            // TODO: Replace with actual API call
-            const mockData: Material[] = [
-                { id: '1', name: 'TMT Steel Bars', specification: 'Fe 500D', dimensions: '12mm x 12m', color: 'Black', category: 'Structural', unit: 'kg' },
-                { id: '2', name: 'Cement', specification: 'OPC 53 Grade', dimensions: '50 kg bags', color: 'Grey', category: 'Structural', unit: 'bags' },
-                { id: '3', name: 'PVC Pipes', specification: 'Schedule 40', dimensions: '4 inch x 6m', color: 'White', category: 'Plumbing', unit: 'pieces' },
-                { id: '4', name: 'Electrical Wire', specification: 'FRLS', dimensions: '2.5 sqmm', color: 'Red', category: 'Electrical', unit: 'meter' },
-                { id: '5', name: 'Wall Tiles', specification: 'Vitrified', dimensions: '600x600mm', color: 'Beige', category: 'Finishing', unit: 'sqft' },
-            ];
-            setMaterials(mockData);
-            setFilteredMaterials(mockData);
+            const currentPage = resetPage ? 1 : page;
+            const response = await materialsApi.getAll({
+                page: currentPage,
+                limit: 20,
+                itemGroupId: selectedCategory || undefined,
+                search: searchQuery || undefined,
+            });
+
+            const sortedData = [...response.data].sort((a, b) => {
+                if (sortBy === 'name') return a.name.localeCompare(b.name);
+                if (sortBy === 'category') return (a.itemGroup?.name || '').localeCompare(b.itemGroup?.name || '');
+                return 0;
+            });
+
+            if (resetPage) {
+                setMaterials(sortedData);
+                setPage(1);
+            } else {
+                setMaterials(prev => [...prev, ...sortedData]);
+            }
+            setHasMore(response.pagination.hasNext);
         } catch (error) {
             console.error('Failed to fetch materials:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
         }
-    }, []);
+    }, [page, selectedCategory, searchQuery, sortBy]);
 
+    // Refresh on focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchMaterials(true);
+        }, [selectedCategory, searchQuery, sortBy])
+    );
+
+    // Re-fetch when filters change
     useEffect(() => {
-        fetchMaterials();
-    }, [fetchMaterials]);
-
-    useEffect(() => {
-        let filtered = [...materials];
-
-        // Filter by category
-        if (category !== 'All') {
-            filtered = filtered.filter(m => m.category === category);
+        if (!loading) {
+            setLoading(true);
+            fetchMaterials(true);
         }
-
-        // Filter by search
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            filtered = filtered.filter(m =>
-                m.name.toLowerCase().includes(query) ||
-                m.category.toLowerCase().includes(query)
-            );
-        }
-
-        // Sort
-        filtered.sort((a, b) => {
-            if (sortBy === 'name') return a.name.localeCompare(b.name);
-            if (sortBy === 'category') return a.category.localeCompare(b.category);
-            return 0;
-        });
-
-        setFilteredMaterials(filtered);
-    }, [materials, searchQuery, sortBy, category]);
+    }, [selectedCategory, searchQuery, sortBy]);
 
     const onRefresh = () => {
         setRefreshing(true);
-        fetchMaterials();
+        fetchMaterials(true);
+    };
+
+    const loadMore = () => {
+        if (hasMore && !loadingMore) {
+            setLoadingMore(true);
+            setPage(prev => prev + 1);
+            fetchMaterials(false);
+        }
     };
 
     const renderMaterial = ({ item }: { item: Material }) => (
@@ -114,11 +123,20 @@ export default function MaterialsList() {
             </View>
             <View style={styles.cardContent}>
                 <Text style={styles.materialName}>{item.name}</Text>
-                <Text style={styles.materialCategory}>{item.category}</Text>
+                <Text style={styles.materialCategory}>{item.itemGroup?.name || 'Uncategorized'}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
         </TouchableOpacity>
     );
+
+    const renderFooter = () => {
+        if (!loadingMore) return null;
+        return (
+            <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+            </View>
+        );
+    };
 
     if (loading && !refreshing) {
         return (
@@ -158,7 +176,7 @@ export default function MaterialsList() {
                     <View style={styles.pickerWrapper}>
                         <Picker
                             selectedValue={sortBy}
-                            onValueChange={setSortBy}
+                            onValueChange={(v) => setSortBy(v as 'name' | 'category')}
                             style={styles.picker}
                         >
                             <Picker.Item label="Name" value="name" />
@@ -170,12 +188,13 @@ export default function MaterialsList() {
                     <Text style={styles.filterLabel}>Category</Text>
                     <View style={styles.pickerWrapper}>
                         <Picker
-                            selectedValue={category}
-                            onValueChange={setCategory}
+                            selectedValue={selectedCategory}
+                            onValueChange={setSelectedCategory}
                             style={styles.picker}
                         >
-                            {CATEGORIES.map(cat => (
-                                <Picker.Item key={cat} label={cat} value={cat} />
+                            <Picker.Item label="All" value="" />
+                            {categories.map(cat => (
+                                <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
                             ))}
                         </Picker>
                     </View>
@@ -183,11 +202,14 @@ export default function MaterialsList() {
             </View>
 
             <FlatList
-                data={filteredMaterials}
+                data={materials}
                 keyExtractor={item => item.id}
                 renderItem={renderMaterial}
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                onEndReached={loadMore}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={renderFooter}
                 ListEmptyComponent={
                     <View style={styles.empty}>
                         <Ionicons name="cube-outline" size={56} color={theme.colors.textSecondary} />
@@ -276,4 +298,5 @@ const styles = StyleSheet.create({
     materialCategory: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
     empty: { padding: 48, alignItems: 'center' },
     emptyText: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 16 },
+    footerLoader: { paddingVertical: 20, alignItems: 'center' },
 });

@@ -33,9 +33,12 @@ export default function DirectorIndentDetails() {
     const [loading, setLoading] = useState(true);
     const [approving, setApproving] = useState(false);
     const [rejecting, setRejecting] = useState(false);
+    const [holdingAction, setHoldingAction] = useState(false);
     const [remarks, setRemarks] = useState('');
     const [rejectReason, setRejectReason] = useState('');
+    const [holdReason, setHoldReason] = useState('');
     const [showRejectModal, setShowRejectModal] = useState(false);
+    const [showHoldModal, setShowHoldModal] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -86,6 +89,37 @@ export default function DirectorIndentDetails() {
         }
     };
 
+    const handlePutOnHold = async () => {
+        if (!holdReason.trim()) {
+            Alert.alert('Error', 'Please enter a reason for putting on hold');
+            return;
+        }
+        setHoldingAction(true);
+        try {
+            await indentsApi.putOnHold(id!, holdReason);
+            Alert.alert('Success', 'Indent put on hold', [
+                { text: 'OK', onPress: () => { fetchIndent(); setShowHoldModal(false); setHoldReason(''); } }
+            ]);
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.error || 'Failed to put on hold');
+        } finally {
+            setHoldingAction(false);
+        }
+    };
+
+    const handleReleaseFromHold = async () => {
+        setHoldingAction(true);
+        try {
+            await indentsApi.releaseFromHold(id!);
+            Alert.alert('Success', 'Indent released from hold');
+            fetchIndent();
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.error || 'Failed to release from hold');
+        } finally {
+            setHoldingAction(false);
+        }
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -105,12 +139,14 @@ export default function DirectorIndentDetails() {
     const StatusBadge = ({ status }: { status: IndentStatus }) => (
         <View style={[styles.badge, { backgroundColor: STATUS_COLORS[status] + '20' }]}>
             <Text style={[styles.badgeText, { color: STATUS_COLORS[status] }]}>
-                {STATUS_LABELS[status]}
+                {indent?.isOnHold ? 'On Hold' : STATUS_LABELS[status]}
             </Text>
         </View>
     );
 
-    const canApprove = indent.status === IndentStatus.PURCHASE_APPROVED;
+    const canApprove = indent.status === IndentStatus.PURCHASE_APPROVED && !indent.isOnHold;
+    const canPutOnHold = indent.status === IndentStatus.PURCHASE_APPROVED && !indent.isOnHold;
+    const canReleaseFromHold = indent.isOnHold;
 
     return (
         <ScrollView style={styles.container}>
@@ -169,10 +205,71 @@ export default function DirectorIndentDetails() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                        style={styles.holdButton}
+                        onPress={() => setShowHoldModal(true)}
+                    >
+                        <Text style={styles.holdButtonText}>Put On Hold</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                         style={styles.rejectButton}
                         onPress={() => setShowRejectModal(true)}
                     >
                         <Text style={styles.rejectButtonText}>Reject Indent</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {canReleaseFromHold && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>On Hold</Text>
+                    {indent.onHoldReason && (
+                        <View style={styles.holdReasonBox}>
+                            <Text style={styles.holdReasonLabel}>Reason:</Text>
+                            <Text style={styles.holdReasonText}>{indent.onHoldReason}</Text>
+                        </View>
+                    )}
+                    <TouchableOpacity
+                        style={styles.approveButton}
+                        onPress={handleReleaseFromHold}
+                        disabled={holdingAction}
+                    >
+                        {holdingAction ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                        ) : (
+                            <Text style={styles.approveButtonText}>Release from Hold</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {showHoldModal && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Put On Hold</Text>
+                    <TextInput
+                        style={styles.remarksInput}
+                        placeholder="Enter reason for holding..."
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={holdReason}
+                        onChangeText={setHoldReason}
+                        multiline
+                    />
+                    <TouchableOpacity
+                        style={styles.confirmHoldButton}
+                        onPress={handlePutOnHold}
+                        disabled={holdingAction}
+                    >
+                        {holdingAction ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                        ) : (
+                            <Text style={styles.approveButtonText}>Confirm Hold</Text>
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={() => { setShowHoldModal(false); setHoldReason(''); }}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -336,5 +433,55 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         paddingVertical: 14,
         alignItems: 'center',
+    },
+    holdButton: {
+        backgroundColor: 'transparent',
+        borderRadius: 8,
+        paddingVertical: 14,
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#F59E0B',
+        marginBottom: 12,
+    },
+    holdButtonText: {
+        color: '#F59E0B',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    confirmHoldButton: {
+        backgroundColor: '#F59E0B',
+        borderRadius: 8,
+        paddingVertical: 14,
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    holdReasonBox: {
+        backgroundColor: '#FEF3C7',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 12,
+    },
+    holdReasonLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#92400E',
+        marginBottom: 4,
+    },
+    holdReasonText: {
+        fontSize: 14,
+        color: '#92400E',
+    },
+    cancelButton: {
+        backgroundColor: 'transparent',
+        borderRadius: 8,
+        paddingVertical: 14,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    cancelButtonText: {
+        color: theme.colors.textSecondary,
+        fontSize: 16,
+        fontWeight: '600',
     },
 });

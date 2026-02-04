@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import { useAuth } from '../../src/context';
 
 const theme = {
     colors: {
@@ -28,33 +28,13 @@ const theme = {
 };
 
 export default function AccountScreen() {
-    const [user, setUser] = useState<any>(null);
+    const { user, logout } = useAuth();
     const router = useRouter();
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteConfirmName, setDeleteConfirmName] = useState('');
     const [deleting, setDeleting] = useState(false);
-
-    useEffect(() => {
-        loadUser();
-    }, []);
-
-    const loadUser = async () => {
-        try {
-            const userJson = await SecureStore.getItemAsync('auth_user');
-            if (userJson) setUser(JSON.parse(userJson));
-        } catch (e) { }
-    };
-
-    const logout = async () => {
-        try {
-            await SecureStore.deleteItemAsync('auth_access_token');
-            await SecureStore.deleteItemAsync('auth_refresh_token');
-            await SecureStore.deleteItemAsync('auth_user');
-        } catch (e) { }
-    };
-
     const handleLogout = () => {
         Alert.alert(
             'Logout',

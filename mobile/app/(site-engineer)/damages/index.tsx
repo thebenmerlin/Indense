@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { indentsApi } from '../../../src/api';
-import { Indent } from '../../../src/types';
+import { damagesApi } from '../../../src/api';
+import { Indent, DamageReport } from '../../../src/types';
 
 const theme = {
     colors: {
@@ -27,10 +27,11 @@ const theme = {
 };
 
 interface DamageRecord {
+    id: string;
     indentId: string;
     indentName: string;
     indentNumber: string;
-    status: 'DRAFT' | 'REPORTED';
+    status: 'DRAFT' | 'SUBMITTED';
     damageCount: number;
     createdAt: Date;
 }
@@ -41,6 +42,7 @@ export default function DamagesScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [showIndentPicker, setShowIndentPicker] = useState(false);
     const [purchasedIndents, setPurchasedIndents] = useState<Indent[]>([]);
+    const [loadingIndents, setLoadingIndents] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -49,9 +51,18 @@ export default function DamagesScreen() {
 
     const loadData = async () => {
         try {
-            // TODO: Load existing damage records from API
-            // For now, using empty state
-            setDamageRecords([]);
+            // Load existing damage reports from API
+            const response = await damagesApi.getAll({ limit: 100 });
+            const records: DamageRecord[] = response.data.map((report: DamageReport) => ({
+                id: report.id,
+                indentId: report.indentId,
+                indentName: report.indent?.name || report.indent?.indentNumber || 'Unknown Indent',
+                indentNumber: report.indent?.indentNumber || '',
+                status: report.status as 'DRAFT' | 'SUBMITTED',
+                damageCount: report.images?.length || 1,
+                createdAt: new Date(report.createdAt),
+            }));
+            setDamageRecords(records);
         } catch (error) {
             console.error('Failed to load damages:', error);
         } finally {
@@ -61,15 +72,16 @@ export default function DamagesScreen() {
     };
 
     const loadPurchasedIndents = async () => {
+        setLoadingIndents(true);
         try {
-            const response = await indentsApi.getAll({
-                limit: 100,
-                status: 'ORDERED'
-            });
+            // Use the dedicated endpoint to get purchased indents for damage reporting
+            const response = await damagesApi.getPurchasedIndents();
             setPurchasedIndents(response.data);
             setShowIndentPicker(true);
         } catch (error) {
             console.error('Failed to load purchased indents:', error);
+        } finally {
+            setLoadingIndents(false);
         }
     };
 
@@ -89,7 +101,7 @@ export default function DamagesScreen() {
 
     const renderDamageRecord = ({ item }: { item: DamageRecord }) => (
         <TouchableOpacity
-            onPress={() => router.push(`/(site-engineer)/damages/${item.indentId}` as any)}
+            onPress={() => router.push(`/(site-engineer)/damages/${item.id}` as any)}
             activeOpacity={0.7}
         >
             <View style={[styles.card, item.status === 'DRAFT' && styles.draftCard]}>
@@ -126,13 +138,27 @@ export default function DamagesScreen() {
         </TouchableOpacity>
     );
 
+    const handleSelectIndentForNewDamage = async (indent: Indent) => {
+        setShowIndentPicker(false);
+        try {
+            // Create a new draft damage report
+            const damageReport = await damagesApi.create({
+                indentId: indent.id,
+                name: `Damage Report - ${indent.name || indent.indentNumber}`,
+                description: '',
+                isDraft: true,
+            });
+            // Navigate to the damage detail screen
+            router.push(`/(site-engineer)/damages/${damageReport.id}` as any);
+        } catch (error) {
+            console.error('Failed to create damage report:', error);
+        }
+    };
+
     const renderIndentOption = ({ item }: { item: Indent }) => (
         <TouchableOpacity
             style={styles.indentOption}
-            onPress={() => {
-                setShowIndentPicker(false);
-                router.push(`/(site-engineer)/damages/${item.id}` as any);
-            }}
+            onPress={() => handleSelectIndentForNewDamage(item)}
         >
             <View>
                 <Text style={styles.indentOptionName}>{item.name || item.indentNumber}</Text>

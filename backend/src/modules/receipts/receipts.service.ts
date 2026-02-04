@@ -1,4 +1,4 @@
-import { IndentStatus, Role } from '@prisma/client';
+import { IndentStatus, Role, NotificationType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../../utils/errors';
 import { CreateReceiptDto, PaginatedResult } from '../../types';
@@ -6,6 +6,8 @@ import { parsePaginationParams, buildPaginatedResult } from '../../utils/paginat
 import { canRecordReceipt, validateTransition } from '../indents/indents.stateMachine';
 import { createAuditLog } from '../../middleware/auditLog';
 import { AuditAction, EntityType } from '../../types/enums';
+import fs from 'fs';
+import notificationsService from '../notifications/notifications.service';
 
 class ReceiptsService {
     private async generateReceiptNumber(siteCode: string): Promise<string> {
@@ -29,7 +31,7 @@ class ReceiptsService {
     }
 
     async findAll(
-        params: { page?: number; limit?: number; indentId?: string },
+        params: { page?: number; limit?: number; indentId?: string; siteId?: string; fromDate?: Date; toDate?: Date },
         userRole: Role,
         userSiteId: string | null
     ): Promise<PaginatedResult<unknown>> {
@@ -40,13 +42,26 @@ class ReceiptsService {
 
         // Site engineers can only see their site's receipts
         if (userRole === Role.SITE_ENGINEER && userSiteId) {
-            where.createdBy = { siteId: userSiteId };
+            where.siteId = userSiteId;
+        } else if (params.siteId) {
+            where.siteId = params.siteId;
+        }
+
+        // Date filtering
+        if (params.fromDate || params.toDate) {
+            where.createdAt = {};
+            if (params.fromDate) (where.createdAt as Record<string, Date>).gte = params.fromDate;
+            if (params.toDate) (where.createdAt as Record<string, Date>).lte = params.toDate;
         }
 
         const [receipts, total] = await Promise.all([
             prisma.receipt.findMany({
                 where,
                 include: {
+                    indent: {
+                        select: { indentNumber: true, name: true, status: true },
+                    },
+                    site: { select: { name: true, code: true } },
                     items: { include: { indentItem: { include: { material: true } } } },
                     images: true,
                     createdBy: { select: { name: true } },
@@ -61,7 +76,52 @@ class ReceiptsService {
         return buildPaginatedResult(receipts, total, pag);
     }
 
-    async create(data: CreateReceiptDto, userId: string, userSiteId: string | null): Promise<unknown> {
+    async findById(id: string, userRole: Role, userSiteId: string | null): Promise<unknown> {
+        const receipt = await prisma.receipt.findUnique({
+            where: { id },
+            include: {
+                indent: {
+                    select: { id: true, indentNumber: true, name: true, status: true },
+                },
+                site: { select: { name: true, code: true } },
+                items: { include: { indentItem: { include: { material: true } } } },
+                images: true,
+                createdBy: { select: { name: true } },
+            },
+        });
+
+        if (!receipt) throw new NotFoundError('Receipt not found');
+
+        // Site Engineers can only view their site's receipts
+        if (userRole === Role.SITE_ENGINEER && receipt.siteId !== userSiteId) {
+            throw new ForbiddenError('Access denied to this receipt');
+        }
+
+        return receipt;
+    }
+
+    async findByIndentId(indentId: string, userRole: Role, userSiteId: string | null): Promise<unknown[]> {
+        const indent = await prisma.indent.findUnique({ where: { id: indentId } });
+        if (!indent) throw new NotFoundError('Indent not found');
+
+        // Site Engineers can only view their site's receipts
+        if (userRole === Role.SITE_ENGINEER && indent.siteId !== userSiteId) {
+            throw new ForbiddenError('Access denied to this indent');
+        }
+
+        const receipts = await prisma.receipt.findMany({
+            where: { indentId },
+            include: {
+                images: true,
+                createdBy: { select: { name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return receipts;
+    }
+
+    async create(data: CreateReceiptDto & { name?: string }, userId: string, userSiteId: string | null): Promise<unknown> {
         const indent = await prisma.indent.findUnique({
             where: { id: data.indentId },
             include: { site: true, items: true },
@@ -71,67 +131,89 @@ class ReceiptsService {
         if (userSiteId && indent.siteId !== userSiteId) {
             throw new ForbiddenError('Access denied to this indent');
         }
-        if (!canRecordReceipt(indent.status)) {
-            throw new BadRequestError(`Cannot record receipt for indent in ${indent.status} status`);
+        
+        // For Site Engineer receipts (just photo upload), we allow on approved indents
+        const allowedStatuses: string[] = [
+            IndentStatus.DIRECTOR_APPROVED,
+            IndentStatus.ORDER_PLACED,
+            IndentStatus.PARTIALLY_RECEIVED,
+            IndentStatus.FULLY_RECEIVED,
+        ];
+        if (!allowedStatuses.includes(indent.status)) {
+            throw new BadRequestError(`Cannot create receipt for indent in ${indent.status} status`);
         }
 
         const receiptNumber = await this.generateReceiptNumber(indent.site.code);
 
+        let statusAfter = indent.status;
+
         const receipt = await prisma.$transaction(async (tx) => {
-            const created = await tx.receipt.create({
-                data: {
-                    receiptNumber,
-                    indentId: data.indentId,
-                    createdById: userId,
-                    deliveryNote: data.deliveryNote,
-                    remarks: data.remarks,
-                    items: {
-                        create: data.items.map((item) => ({
-                            indentItemId: item.indentItemId,
-                            receivedQty: item.receivedQty,
-                            remarks: item.remarks,
-                        })),
-                    },
-                },
-                include: { items: true },
-            });
+            const createData: Record<string, unknown> = {
+                receiptNumber,
+                name: data.name || null,
+                indentId: data.indentId,
+                siteId: indent.siteId,
+                createdById: userId,
+                deliveryNote: data.deliveryNote,
+                remarks: data.remarks,
+            };
 
-            // Update indent items received quantities
-            for (const item of data.items) {
-                const indentItem = indent.items.find((i) => i.id === item.indentItemId);
-                if (indentItem) {
-                    const newReceivedQty = indentItem.receivedQty + item.receivedQty;
-                    const newPendingQty = indentItem.requestedQty - newReceivedQty;
-
-                    await tx.indentItem.update({
-                        where: { id: item.indentItemId },
-                        data: {
-                            receivedQty: newReceivedQty,
-                            pendingQty: Math.max(0, newPendingQty),
-                        },
-                    });
-                }
+            // Only add items if provided
+            if (data.items && data.items.length > 0) {
+                createData.items = {
+                    create: data.items.map((item) => ({
+                        indentItemId: item.indentItemId,
+                        receivedQty: item.receivedQty,
+                        remarks: item.remarks,
+                    })),
+                };
             }
 
-            // Check if all items are fully received
-            const updatedItems = await tx.indentItem.findMany({
-                where: { indentId: data.indentId },
+            const created = await tx.receipt.create({
+                data: createData as any,
+                include: { items: true, images: true },
             });
 
-            const allFullyReceived = updatedItems.every(
-                (item) => item.receivedQty >= item.requestedQty
-            );
+            // Update indent items received quantities if items provided
+            if (data.items && data.items.length > 0) {
+                for (const item of data.items) {
+                    const indentItem = indent.items.find((i) => i.id === item.indentItemId);
+                    if (indentItem) {
+                        const newReceivedQty = indentItem.receivedQty + item.receivedQty;
+                        const newPendingQty = indentItem.requestedQty - newReceivedQty;
 
-            const newStatus = allFullyReceived
-                ? IndentStatus.FULLY_RECEIVED
-                : IndentStatus.PARTIALLY_RECEIVED;
+                        await tx.indentItem.update({
+                            where: { id: item.indentItemId },
+                            data: {
+                                receivedQty: newReceivedQty,
+                                pendingQty: Math.max(0, newPendingQty),
+                            },
+                        });
+                    }
+                }
 
-            validateTransition(indent.status, newStatus);
+                // Check if all items are fully received
+                const updatedItems = await tx.indentItem.findMany({
+                    where: { indentId: data.indentId },
+                });
 
-            await tx.indent.update({
-                where: { id: data.indentId },
-                data: { status: newStatus },
-            });
+                const allFullyReceived = updatedItems.every(
+                    (item) => item.receivedQty >= item.requestedQty
+                );
+
+                const newStatus = allFullyReceived
+                    ? IndentStatus.FULLY_RECEIVED
+                    : IndentStatus.PARTIALLY_RECEIVED;
+
+                if (indent.status !== newStatus && canRecordReceipt(indent.status)) {
+                    validateTransition(indent.status, newStatus);
+                    await tx.indent.update({
+                        where: { id: data.indentId },
+                        data: { status: newStatus },
+                    });
+                    statusAfter = newStatus;
+                }
+            }
 
             return created;
         });
@@ -143,6 +225,36 @@ class ReceiptsService {
             indentId: data.indentId,
             metadata: { receiptNumber },
         });
+
+        if (statusAfter === IndentStatus.FULLY_RECEIVED) {
+            await notificationsService.notifyRole(
+                NotificationType.MATERIAL_RECEIVED,
+                Role.PURCHASE_TEAM,
+                data.indentId,
+                `All materials received for indent ${indent.indentNumber}.`
+            );
+
+            await notificationsService.notifyRole(
+                NotificationType.MATERIAL_RECEIVED,
+                Role.DIRECTOR,
+                data.indentId,
+                `All materials received for indent ${indent.indentNumber}.`
+            );
+        } else if (statusAfter === IndentStatus.PARTIALLY_RECEIVED) {
+            await notificationsService.notifyRole(
+                NotificationType.PARTIAL_RECEIVED,
+                Role.PURCHASE_TEAM,
+                data.indentId,
+                `Partial receipt recorded for indent ${indent.indentNumber}.`
+            );
+
+            await notificationsService.notifyRole(
+                NotificationType.PARTIAL_RECEIVED,
+                Role.DIRECTOR,
+                data.indentId,
+                `Partial receipt recorded for indent ${indent.indentNumber}.`
+            );
+        }
 
         return receipt;
     }
@@ -170,6 +282,66 @@ class ReceiptsService {
         });
 
         return image;
+    }
+
+    async deleteReceipt(receiptId: string, userId: string, userSiteId: string | null): Promise<void> {
+        const receipt = await prisma.receipt.findUnique({
+            where: { id: receiptId },
+            include: { images: true },
+        });
+
+        if (!receipt) throw new NotFoundError('Receipt not found');
+
+        // Site Engineers can only delete their own receipts
+        if (receipt.siteId !== userSiteId) {
+            throw new ForbiddenError('Access denied to this receipt');
+        }
+
+        // Delete associated image files
+        for (const image of receipt.images) {
+            try {
+                if (fs.existsSync(image.path)) {
+                    fs.unlinkSync(image.path);
+                }
+            } catch (e) {
+                console.error(`Failed to delete image file: ${image.path}`, e);
+            }
+        }
+
+        await prisma.receipt.delete({ where: { id: receiptId } });
+
+        await createAuditLog(userId, {
+            action: AuditAction.RECEIPT_DELETED as any,
+            entityType: EntityType.RECEIPT,
+            entityId: receiptId,
+            indentId: receipt.indentId,
+        });
+    }
+
+    async deleteImage(receiptId: string, imageId: string, userId: string, userSiteId: string | null): Promise<void> {
+        const receipt = await prisma.receipt.findUnique({ where: { id: receiptId } });
+        if (!receipt) throw new NotFoundError('Receipt not found');
+
+        // Site Engineers can only delete their own receipts' images
+        if (receipt.siteId !== userSiteId) {
+            throw new ForbiddenError('Access denied to this receipt');
+        }
+
+        const image = await prisma.receiptImage.findUnique({ where: { id: imageId } });
+        if (!image || image.receiptId !== receiptId) {
+            throw new NotFoundError('Image not found');
+        }
+
+        // Delete the file
+        try {
+            if (fs.existsSync(image.path)) {
+                fs.unlinkSync(image.path);
+            }
+        } catch (e) {
+            console.error(`Failed to delete image file: ${image.path}`, e);
+        }
+
+        await prisma.receiptImage.delete({ where: { id: imageId } });
     }
 }
 

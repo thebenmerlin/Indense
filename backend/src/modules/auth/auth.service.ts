@@ -5,7 +5,8 @@ import { prisma } from '../../config/database';
 import { authConfig } from '../../config/auth';
 import { UnauthorizedError, BadRequestError, NotFoundError } from '../../utils/errors';
 import { JwtPayload, RefreshTokenPayload } from '../../types/express';
-import { Role, SecurityQuestion } from '@prisma/client';
+import { Role, SecurityQuestion, NotificationType } from '@prisma/client';
+import notificationsService from '../notifications/notifications.service';
 
 export interface LoginResult {
     accessToken: string;
@@ -107,6 +108,13 @@ class AuthService {
         // Generate tokens
         const accessToken = this.generateAccessToken(user);
         const refreshToken = await this.generateRefreshToken(user.id);
+
+        await notificationsService.notifyRole(
+            NotificationType.USER_REGISTERED,
+            Role.DIRECTOR,
+            undefined,
+            `New user registered: ${user.name} (${user.email}).`
+        );
 
         return {
             accessToken,

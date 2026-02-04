@@ -8,9 +8,12 @@ import {
     RefreshControl,
     ActivityIndicator,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { indentsApi } from '../../../../src/api/indents.api';
+import { sitesApi, Site } from '../../../../src/api/sites.api';
+import { Indent } from '../../../../src/types';
 
 const theme = {
     colors: {
@@ -26,106 +29,133 @@ const theme = {
     }
 };
 
-interface IndentItem {
-    id: string;
-    name: string;
-    siteName: string;
-    siteEngineer: string;
-    createdAt: string;
-    approvalStatus: string;
-    purchaseStatus: string;
-    isClosed: boolean;
-}
-
 export default function AllIndentsList() {
     const { siteId } = useLocalSearchParams<{ siteId?: string }>();
-    const [indents, setIndents] = useState<IndentItem[]>([]);
+    const [indents, setIndents] = useState<Indent[]>([]);
+    const [sites, setSites] = useState<Site[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [siteFilter, setSiteFilter] = useState(siteId || 'all');
-    const [approvalFilter, setApprovalFilter] = useState('all');
-    const [purchaseFilter, setPurchaseFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
     const router = useRouter();
 
-    const sites = ['all', 'Green Valley', 'Skyline Towers', 'Riverside'];
-    const approvalStatuses = ['all', 'Approved', 'Rejected', 'Pending', 'On Hold'];
-    const purchaseStatuses = ['all', 'Ordered', 'Received', 'Pending'];
+    const statusOptions = [
+        { label: 'All', value: 'all' },
+        { label: 'Pending', value: 'PENDING' },
+        { label: 'PT Approved', value: 'PT_APPROVED' },
+        { label: 'Director Approved', value: 'DIRECTOR_APPROVED' },
+        { label: 'Ordered', value: 'ORDERED' },
+        { label: 'Received', value: 'RECEIVED' },
+        { label: 'Closed', value: 'CLOSED' },
+        { label: 'Rejected', value: 'REJECTED' },
+    ];
+
+    // Load sites for filter
+    useEffect(() => {
+        const loadSites = async () => {
+            try {
+                const response = await sitesApi.getAll({ limit: 100 });
+                setSites(response.data);
+            } catch (error) {
+                console.error('Failed to fetch sites:', error);
+            }
+        };
+        loadSites();
+    }, []);
 
     const fetchIndents = useCallback(async () => {
         try {
-            // TODO: Replace with actual API call
-            setIndents([
-                { id: '1', name: 'Steel & Cement Order', siteName: 'Green Valley', siteEngineer: 'Rajesh Kumar', createdAt: '2024-02-01', approvalStatus: 'Approved', purchaseStatus: 'Ordered', isClosed: false },
-                { id: '2', name: 'Electrical Wiring', siteName: 'Skyline Towers', siteEngineer: 'Priya Sharma', createdAt: '2024-01-28', approvalStatus: 'Approved', purchaseStatus: 'Received', isClosed: true },
-                { id: '3', name: 'Plumbing Materials', siteName: 'Riverside', siteEngineer: 'Amit Patel', createdAt: '2024-01-25', approvalStatus: 'Pending', purchaseStatus: 'Pending', isClosed: false },
-                { id: '4', name: 'Finishing Work', siteName: 'Green Valley', siteEngineer: 'Rajesh Kumar', createdAt: '2024-01-20', approvalStatus: 'Rejected', purchaseStatus: 'Pending', isClosed: false },
-            ]);
+            const response = await indentsApi.getAll({
+                siteId: siteFilter !== 'all' ? siteFilter : undefined,
+                status: statusFilter !== 'all' ? statusFilter : undefined,
+                limit: 50,
+            });
+            // Sort by date, newest first
+            const sortedData = [...response.data].sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            setIndents(sortedData);
         } catch (error) {
             console.error('Failed to fetch indents:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [siteFilter, statusFilter]);
 
-    useEffect(() => {
-        fetchIndents();
-    }, [fetchIndents]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchIndents();
+        }, [fetchIndents])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
         fetchIndents();
     };
 
-    const filteredIndents = indents.filter(indent => {
-        if (siteFilter !== 'all' && indent.siteName !== siteFilter) return false;
-        if (approvalFilter !== 'all' && indent.approvalStatus !== approvalFilter) return false;
-        if (purchaseFilter !== 'all' && indent.purchaseStatus !== purchaseFilter) return false;
-        return true;
-    });
-
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     };
 
-    const getStatusColor = (status: string) => {
+    const getStatusColor = (status: string, isOnHold?: boolean) => {
+        if (isOnHold) return theme.colors.warning;
         switch (status) {
-            case 'Approved': case 'Ordered': case 'Received': return theme.colors.success;
-            case 'Rejected': return theme.colors.error;
-            case 'On Hold': return theme.colors.warning;
+            case 'DIRECTOR_APPROVED': case 'ORDERED': case 'RECEIVED': case 'CLOSED':
+                return theme.colors.success;
+            case 'REJECTED': return theme.colors.error;
+            case 'PT_APPROVED': return theme.colors.primary;
             default: return theme.colors.textSecondary;
         }
     };
 
-    const renderIndent = ({ item }: { item: IndentItem }) => (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/(director)/indents/all/${item.id}` as any)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.cardHeader}>
-                <Text style={styles.indentName}>{item.name}</Text>
-                {item.isClosed && (
-                    <View style={styles.closedBadge}>
-                        <Text style={styles.closedText}>CLOSED</Text>
+    const getStatusLabel = (status: string, isOnHold?: boolean) => {
+        if (isOnHold) return 'On Hold';
+        switch (status) {
+            case 'PENDING': return 'Pending';
+            case 'PT_APPROVED': return 'PT Approved';
+            case 'DIRECTOR_APPROVED': return 'Approved';
+            case 'ORDERED': return 'Ordered';
+            case 'RECEIVED': return 'Received';
+            case 'CLOSED': return 'Closed';
+            case 'REJECTED': return 'Rejected';
+            default: return status;
+        }
+    };
+
+    const renderIndent = ({ item }: { item: Indent }) => {
+        const siteName = item.site?.name || 'Unknown Site';
+        const engineerName = item.createdBy?.name || 'Unknown';
+
+        return (
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() => router.push(`/(director)/indents/${item.id}` as any)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.cardHeader}>
+                    <Text style={styles.indentName}>{item.name}</Text>
+                    {item.status === 'CLOSED' && (
+                        <View style={styles.closedBadge}>
+                            <Text style={styles.closedText}>CLOSED</Text>
+                        </View>
+                    )}
+                </View>
+                <View style={styles.cardBody}>
+                    <Text style={styles.infoText}>{engineerName} • {siteName}</Text>
+                    <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+                </View>
+                <View style={styles.cardFooter}>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, item.isOnHold) + '15' }]}>
+                        <Text style={[styles.statusText, { color: getStatusColor(item.status, item.isOnHold) }]}>
+                            {getStatusLabel(item.status, item.isOnHold)}
+                        </Text>
                     </View>
-                )}
-            </View>
-            <View style={styles.cardBody}>
-                <Text style={styles.infoText}>{item.siteEngineer} • {item.siteName}</Text>
-                <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
-            </View>
-            <View style={styles.cardFooter}>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.approvalStatus) + '15' }]}>
-                    <Text style={[styles.statusText, { color: getStatusColor(item.approvalStatus) }]}>{item.approvalStatus}</Text>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.purchaseStatus) + '15' }]}>
-                    <Text style={[styles.statusText, { color: getStatusColor(item.purchaseStatus) }]}>{item.purchaseStatus}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     if (loading && !refreshing) {
         return (
@@ -160,25 +190,16 @@ export default function AllIndentsList() {
                         <Text style={styles.filterLabel}>Site</Text>
                         <View style={styles.pickerWrapper}>
                             <Picker selectedValue={siteFilter} onValueChange={setSiteFilter} style={styles.picker}>
-                                {sites.map(s => <Picker.Item key={s} label={s === 'all' ? 'All Sites' : s} value={s} />)}
+                                <Picker.Item label="All Sites" value="all" />
+                                {sites.map(s => <Picker.Item key={s.id} label={s.name} value={s.id} />)}
                             </Picker>
                         </View>
                     </View>
                     <View style={styles.filterItem}>
-                        <Text style={styles.filterLabel}>Approval</Text>
+                        <Text style={styles.filterLabel}>Status</Text>
                         <View style={styles.pickerWrapper}>
-                            <Picker selectedValue={approvalFilter} onValueChange={setApprovalFilter} style={styles.picker}>
-                                {approvalStatuses.map(s => <Picker.Item key={s} label={s === 'all' ? 'All' : s} value={s} />)}
-                            </Picker>
-                        </View>
-                    </View>
-                </View>
-                <View style={styles.filterRow}>
-                    <View style={styles.filterItem}>
-                        <Text style={styles.filterLabel}>Purchase Status</Text>
-                        <View style={styles.pickerWrapper}>
-                            <Picker selectedValue={purchaseFilter} onValueChange={setPurchaseFilter} style={styles.picker}>
-                                {purchaseStatuses.map(s => <Picker.Item key={s} label={s === 'all' ? 'All' : s} value={s} />)}
+                            <Picker selectedValue={statusFilter} onValueChange={setStatusFilter} style={styles.picker}>
+                                {statusOptions.map(s => <Picker.Item key={s.value} label={s.label} value={s.value} />)}
                             </Picker>
                         </View>
                     </View>
@@ -186,7 +207,7 @@ export default function AllIndentsList() {
             </View>
 
             <FlatList
-                data={filteredIndents}
+                data={indents}
                 keyExtractor={item => item.id}
                 renderItem={renderIndent}
                 contentContainerStyle={styles.list}

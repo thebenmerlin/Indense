@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { usersApi, UserResponse } from '../../../../../src/api/users.api';
 
 const theme = {
     colors: {
@@ -20,30 +21,20 @@ const theme = {
         textSecondary: '#64748B',
         border: '#E2E8F0',
         accent: '#F59E0B',
+        error: '#EF4444',
     }
 };
 
-interface Engineer {
-    id: string;
-    name: string;
-    email: string;
-    sites: { id: string; name: string }[];
-}
-
 export default function EngineersList() {
-    const [engineers, setEngineers] = useState<Engineer[]>([]);
+    const [engineers, setEngineers] = useState<UserResponse[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const router = useRouter();
 
     const fetchEngineers = useCallback(async () => {
         try {
-            // TODO: Replace with actual API call
-            setEngineers([
-                { id: '1', name: 'Rajesh Kumar', email: 'rajesh@example.com', sites: [{ id: '1', name: 'Green Valley' }, { id: '2', name: 'Skyline' }] },
-                { id: '2', name: 'Priya Sharma', email: 'priya@example.com', sites: [{ id: '1', name: 'Green Valley' }] },
-                { id: '3', name: 'Amit Patel', email: 'amit@example.com', sites: [{ id: '3', name: 'Riverside' }, { id: '4', name: 'Sunset' }, { id: '5', name: 'Lakeside' }] },
-            ]);
+            const data = await usersApi.getByRole('SITE_ENGINEER');
+            setEngineers(data);
         } catch (error) {
             console.error('Failed to fetch engineers:', error);
         } finally {
@@ -61,24 +52,33 @@ export default function EngineersList() {
         fetchEngineers();
     };
 
-    const formatSites = (sites: { id: string; name: string }[]) => {
-        if (sites.length === 0) return 'No sites assigned';
+    const formatSites = (sites?: { id: string; name: string; code?: string }[]) => {
+        if (!sites || sites.length === 0) return 'No sites assigned';
         if (sites.length === 1) return sites[0].name;
         if (sites.length === 2) return `${sites[0].name}, ${sites[1].name}`;
         return `${sites[0].name}, ${sites[1].name}, +${sites.length - 2}`;
     };
 
-    const renderEngineer = ({ item }: { item: Engineer }) => (
+    const renderEngineer = ({ item }: { item: UserResponse }) => (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, item.isRevoked && styles.revokedCard]}
             onPress={() => router.push(`/(director)/space/roles/engineers/${item.id}` as any)}
             activeOpacity={0.7}
         >
-            <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+            <View style={[styles.avatar, item.isRevoked && styles.revokedAvatar]}>
+                <Text style={[styles.avatarText, item.isRevoked && styles.revokedAvatarText]}>
+                    {item.name.charAt(0)}
+                </Text>
             </View>
             <View style={styles.cardContent}>
-                <Text style={styles.name}>{item.name}</Text>
+                <View style={styles.nameRow}>
+                    <Text style={[styles.name, item.isRevoked && styles.revokedText]}>{item.name}</Text>
+                    {item.isRevoked && (
+                        <View style={styles.revokedBadge}>
+                            <Text style={styles.revokedBadgeText}>Revoked</Text>
+                        </View>
+                    )}
+                </View>
                 <Text style={styles.sites}>{formatSites(item.sites)}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
@@ -129,6 +129,10 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
         elevation: 2,
     },
+    revokedCard: {
+        opacity: 0.7,
+        backgroundColor: theme.colors.surface,
+    },
     avatar: {
         width: 48,
         height: 48,
@@ -138,9 +142,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 14,
     },
+    revokedAvatar: {
+        backgroundColor: theme.colors.error + '20',
+    },
     avatarText: { fontSize: 20, fontWeight: '600', color: theme.colors.accent },
+    revokedAvatarText: { color: theme.colors.error },
     cardContent: { flex: 1 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     name: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+    revokedText: { color: theme.colors.textSecondary },
+    revokedBadge: {
+        backgroundColor: theme.colors.error + '15',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    revokedBadgeText: { fontSize: 11, fontWeight: '600', color: theme.colors.error },
     sites: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
     empty: { padding: 48, alignItems: 'center' },
     emptyText: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 16 },

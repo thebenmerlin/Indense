@@ -26,16 +26,18 @@ const theme = {
 };
 
 export interface FilterOptions {
-    startDate: Date | null;
-    endDate: Date | null;
-    status: IndentStatus | 'ALL';
+    startDate?: Date | null;
+    endDate?: Date | null;
+    status?: IndentStatus | 'ALL';
+    siteId?: string | null;
 }
 
 interface FilterModalProps {
     visible: boolean;
     onClose: () => void;
     onApply: (filters: FilterOptions) => void;
-    initialFilters: FilterOptions;
+    initialFilters?: FilterOptions;
+    showStatusFilter?: boolean;
 }
 
 const STATUS_OPTIONS: { value: IndentStatus | 'ALL'; label: string; color: string }[] = [
@@ -47,15 +49,15 @@ const STATUS_OPTIONS: { value: IndentStatus | 'ALL'; label: string; color: strin
     { value: IndentStatus.CLOSED, label: 'Closed', color: theme.colors.textSecondary },
 ];
 
-export default function FilterModal({ visible, onClose, onApply, initialFilters }: FilterModalProps) {
-    const [startDate, setStartDate] = useState<Date | null>(initialFilters.startDate);
-    const [endDate, setEndDate] = useState<Date | null>(initialFilters.endDate);
-    const [status, setStatus] = useState<IndentStatus | 'ALL'>(initialFilters.status);
+export default function FilterModal({ visible, onClose, onApply, initialFilters = {}, showStatusFilter = true }: FilterModalProps) {
+    const [startDate, setStartDate] = useState<Date | null>(initialFilters.startDate || null);
+    const [endDate, setEndDate] = useState<Date | null>(initialFilters.endDate || null);
+    const [status, setStatus] = useState<IndentStatus | 'ALL'>(initialFilters.status || 'ALL');
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
 
     const handleApply = () => {
-        onApply({ startDate, endDate, status });
+        onApply({ startDate, endDate, status, siteId: initialFilters.siteId });
         onClose();
     };
 
@@ -118,6 +120,7 @@ export default function FilterModal({ visible, onClose, onApply, initialFilters 
                     </View>
 
                     {/* Status Filter */}
+                    {showStatusFilter && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Status</Text>
                         <View style={styles.statusGrid}>
@@ -141,6 +144,7 @@ export default function FilterModal({ visible, onClose, onApply, initialFilters 
                             ))}
                         </View>
                     </View>
+                    )}
                 </View>
 
                 {/* Buttons */}

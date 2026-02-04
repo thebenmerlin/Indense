@@ -7,10 +7,11 @@ import {
     TouchableOpacity,
     RefreshControl,
     ActivityIndicator,
-    Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { damagesApi } from '../../../../src/api/indents.api';
+import { DamageReport } from '../../../../src/types';
 
 const theme = {
     colors: {
@@ -24,75 +25,81 @@ const theme = {
     }
 };
 
-interface DamagedOrder {
-    id: string;
-    indentName: string;
-    siteName: string;
-    damagedItems: number;
-    totalItems: number;
-    reportedBy: string;
-    reportedDate: string;
-    hasImages: boolean;
-}
-
 export default function DamagedOrdersList() {
-    const [orders, setOrders] = useState<DamagedOrder[]>([]);
+    const [reports, setReports] = useState<DamageReport[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const router = useRouter();
 
-    const fetchOrders = useCallback(async () => {
+    const fetchReports = useCallback(async () => {
         try {
-            // TODO: Replace with actual API call
-            setOrders([
-                { id: '1', indentName: 'Steel & Cement Order', siteName: 'Green Valley', damagedItems: 2, totalItems: 5, reportedBy: 'Rajesh Kumar', reportedDate: '2024-02-02', hasImages: true },
-                { id: '2', indentName: 'Electrical Wiring', siteName: 'Skyline Towers', damagedItems: 1, totalItems: 8, reportedBy: 'Priya Sharma', reportedDate: '2024-01-28', hasImages: true },
-            ]);
+            const response = await damagesApi.getAll({ limit: 50 });
+            // Sort by date, newest first
+            const sortedData = [...response.data].sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            setReports(sortedData);
         } catch (error) {
-            console.error('Failed to fetch orders:', error);
+            console.error('Failed to fetch damage reports:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchOrders();
-    }, [fetchOrders]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchReports();
+        }, [fetchReports])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
-        fetchOrders();
+        fetchReports();
     };
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     };
 
-    const renderOrder = ({ item }: { item: DamagedOrder }) => (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/(director)/indents/damaged/${item.id}` as any)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.cardIcon}>
-                <Ionicons name="alert-circle" size={24} color={theme.colors.error} />
-            </View>
-            <View style={styles.cardContent}>
-                <Text style={styles.indentName}>{item.indentName}</Text>
-                <Text style={styles.siteText}>{item.siteName}</Text>
-                <Text style={styles.metaText}>
-                    {item.damagedItems}/{item.totalItems} items damaged • {formatDate(item.reportedDate)}
-                </Text>
-            </View>
-            {item.hasImages && (
-                <View style={styles.imageBadge}>
-                    <Ionicons name="images" size={16} color={theme.colors.primary} />
+    const getSeverityColor = (severity: string) => {
+        switch (severity) {
+            case 'SEVERE': return theme.colors.error;
+            case 'MODERATE': return '#F59E0B';
+            default: return theme.colors.textSecondary;
+        }
+    };
+
+    const renderReport = ({ item }: { item: DamageReport }) => {
+        const indentName = item.indent?.name || 'Unknown Indent';
+        const siteName = item.indent?.site?.name || 'Unknown Site';
+        const hasImages = (item.images?.length || 0) > 0;
+
+        return (
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() => router.push(`/(director)/indents/${item.indentId}` as any)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.cardIcon}>
+                    <Ionicons name="alert-circle" size={24} color={getSeverityColor(item.severity || 'MINOR')} />
                 </View>
-            )}
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-        </TouchableOpacity>
-    );
+                <View style={styles.cardContent}>
+                    <Text style={styles.indentName}>{item.name}</Text>
+                    <Text style={styles.siteText}>{siteName}</Text>
+                    <Text style={styles.metaText}>
+                        {item.severity || 'MINOR'} • {formatDate(item.createdAt)}
+                    </Text>
+                </View>
+                {hasImages && (
+                    <View style={styles.imageBadge}>
+                        <Ionicons name="images" size={16} color={theme.colors.primary} />
+                    </View>
+                )}
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+        );
+    };
 
     if (loading && !refreshing) {
         return (
@@ -121,9 +128,9 @@ export default function DamagedOrdersList() {
             </View>
 
             <FlatList
-                data={orders}
+                data={reports}
                 keyExtractor={item => item.id}
-                renderItem={renderOrder}
+                renderItem={renderReport}
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={

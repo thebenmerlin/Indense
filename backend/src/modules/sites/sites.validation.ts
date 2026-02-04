@@ -16,6 +16,10 @@ export const createSiteValidation = [
     body('address').optional().isString().trim(),
     body('city').optional().isString().trim(),
     body('state').optional().isString().trim(),
+    body('startDate').optional().isISO8601().toDate(),
+    body('expectedHandoverDate').optional().isISO8601().toDate(),
+    body('engineerIds').optional().isArray(),
+    body('engineerIds.*').optional().isUUID(),
 ];
 
 export const updateSiteValidation = [
@@ -29,4 +33,15 @@ export const updateSiteValidation = [
     body('city').optional().isString().trim(),
     body('state').optional().isString().trim(),
     body('isActive').optional().isBoolean(),
+    body('startDate').optional().isISO8601().toDate(),
+    body('expectedHandoverDate').optional().isISO8601().toDate(),
+];
+
+export const assignEngineersValidation = [
+    body('engineerIds')
+        .isArray({ min: 1 })
+        .withMessage('At least one engineer ID is required'),
+    body('engineerIds.*')
+        .isUUID()
+        .withMessage('Invalid engineer ID format'),
 ];

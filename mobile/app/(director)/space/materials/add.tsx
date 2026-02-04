@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -7,10 +7,12 @@ import {
     TouchableOpacity,
     TextInput,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { materialsApi, MaterialCategory, UnitOfMeasure } from '../../../../src/api/materials.api';
 
 const theme = {
     colors: {
@@ -24,37 +26,87 @@ const theme = {
     }
 };
 
-const CATEGORIES = ['Structural', 'Plumbing', 'Electrical', 'Finishing', 'Hardware', 'Other'];
-const UNITS = ['kg', 'bags', 'pieces', 'meter', 'sqft', 'sqm', 'liters', 'nos'];
-
 export default function AddMaterial() {
     const router = useRouter();
+    const [categories, setCategories] = useState<MaterialCategory[]>([]);
+    const [units, setUnits] = useState<UnitOfMeasure[]>([]);
+    const [loadingData, setLoadingData] = useState(true);
+
     const [name, setName] = useState('');
     const [specification, setSpecification] = useState('');
     const [dimensions, setDimensions] = useState('');
     const [color, setColor] = useState('');
-    const [category, setCategory] = useState('Structural');
-    const [unit, setUnit] = useState('kg');
+    const [code, setCode] = useState('');
+    const [selectedCategoryId, setSelectedCategoryId] = useState('');
+    const [selectedUnitId, setSelectedUnitId] = useState('');
     const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        const loadFormData = async () => {
+            try {
+                const [categoriesData, unitsData] = await Promise.all([
+                    materialsApi.getCategories(),
+                    materialsApi.getUnits(),
+                ]);
+                setCategories(categoriesData);
+                setUnits(unitsData);
+                // Set defaults
+                if (categoriesData.length > 0) setSelectedCategoryId(categoriesData[0].id);
+                if (unitsData.length > 0) setSelectedUnitId(unitsData[0].id);
+            } catch (error) {
+                console.error('Failed to load form data:', error);
+                Alert.alert('Error', 'Failed to load categories and units');
+            } finally {
+                setLoadingData(false);
+            }
+        };
+        loadFormData();
+    }, []);
 
     const handleSave = async () => {
         if (!name.trim()) {
             Alert.alert('Error', 'Material name is required');
             return;
         }
+        if (!selectedCategoryId) {
+            Alert.alert('Error', 'Please select a category');
+            return;
+        }
+        if (!selectedUnitId) {
+            Alert.alert('Error', 'Please select a unit');
+            return;
+        }
+
         setSaving(true);
         try {
-            // TODO: API call to save
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await materialsApi.create({
+                name: name.trim(),
+                specification: specification.trim() || undefined,
+                dimensions: dimensions.trim() || undefined,
+                color: color.trim() || undefined,
+                code: code.trim() || undefined,
+                itemGroupId: selectedCategoryId,
+                uomId: selectedUnitId,
+            });
             Alert.alert('Success', 'Material added successfully', [
                 { text: 'OK', onPress: () => router.back() }
             ]);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to add material');
+        } catch (error: any) {
+            console.error('Failed to create material:', error);
+            const message = error?.response?.data?.message || 'Failed to add material';
+            Alert.alert('Error', message);
         } finally {
             setSaving(false);
         }
     };
+
+    if (loadingData) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -107,17 +159,29 @@ export default function AddMaterial() {
                     />
                 </View>
 
+                {/* Material Code */}
+                <View style={styles.field}>
+                    <Text style={styles.label}>Material Code</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g., TMT-500D-12"
+                        value={code}
+                        onChangeText={setCode}
+                        placeholderTextColor={theme.colors.textSecondary}
+                    />
+                </View>
+
                 {/* Category */}
                 <View style={styles.field}>
                     <Text style={styles.label}>Category *</Text>
                     <View style={styles.pickerWrapper}>
                         <Picker
-                            selectedValue={category}
-                            onValueChange={setCategory}
+                            selectedValue={selectedCategoryId}
+                            onValueChange={setSelectedCategoryId}
                             style={styles.picker}
                         >
-                            {CATEGORIES.map(cat => (
-                                <Picker.Item key={cat} label={cat} value={cat} />
+                            {categories.map(cat => (
+                                <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
                             ))}
                         </Picker>
                     </View>
@@ -128,12 +192,12 @@ export default function AddMaterial() {
                     <Text style={styles.label}>Unit *</Text>
                     <View style={styles.pickerWrapper}>
                         <Picker
-                            selectedValue={unit}
-                            onValueChange={setUnit}
+                            selectedValue={selectedUnitId}
+                            onValueChange={setSelectedUnitId}
                             style={styles.picker}
                         >
-                            {UNITS.map(u => (
-                                <Picker.Item key={u} label={u} value={u} />
+                            {units.map(u => (
+                                <Picker.Item key={u.id} label={`${u.name} (${u.abbreviation})`} value={u.id} />
                             ))}
                         </Picker>
                     </View>
@@ -159,6 +223,7 @@ export default function AddMaterial() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     scrollView: { flex: 1, padding: 16 },
     field: { marginBottom: 20 },
     label: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 8 },

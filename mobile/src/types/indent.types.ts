@@ -91,17 +91,34 @@ export interface Indent {
     site: Site;
     createdBy: { id: string; name: string };
     createdAt: string;
+    updatedAt?: string;
     items: IndentItem[];
     purchaseApprovedBy?: { name: string } | null;
     purchaseApprovedAt?: string | null;
     directorApprovedBy?: { name: string } | null;
     directorApprovedAt?: string | null;
     rejectionReason?: string | null;
+    // On-Hold fields
+    isOnHold?: boolean;
+    onHoldAt?: string | null;
+    onHoldById?: string | null;
+    onHoldBy?: { id: string; name: string } | null;
+    onHoldReason?: string | null;
+    releasedFromHoldAt?: string | null;
     order?: {
+        orderNumber?: string;
         vendorName?: string;
         vendorContact?: string;
-        status: string;
+        vendorEmail?: string;
+        vendorAddress?: string;
+        expectedDeliveryDate?: string;
+        actualDeliveryDate?: string;
+        deliveryStatus?: string;
+        createdAt?: string;
     } | null;
+    _count?: {
+        damageReports?: number;
+    };
 }
 
 export interface CreateIndentPayload {
@@ -118,5 +135,188 @@ export interface CreateIndentPayload {
         notes?: string;
         isUrgent?: boolean;
     }[];
+}
+
+// =============================================================================
+// RECEIPT TYPES
+// =============================================================================
+
+export interface ReceiptImage {
+    id: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    path: string;
+    uploadedAt: string;
+}
+
+export interface ReceiptItem {
+    id: string;
+    indentItemId: string;
+    receivedQty: number;
+    isComplete: boolean;
+    remarks: string | null;
+    indentItem?: IndentItem;
+}
+
+export interface Receipt {
+    id: string;
+    receiptNumber: string;
+    name: string | null;
+    indentId: string;
+    indent?: {
+        id: string;
+        indentNumber: string;
+        name: string;
+        status: IndentStatus;
+    };
+    site?: Site;
+    createdBy: { name: string };
+    receivedDate: string;
+    deliveryNote: string | null;
+    remarks: string | null;
+    items: ReceiptItem[];
+    images: ReceiptImage[];
+    createdAt: string;
+}
+
+// =============================================================================
+// DAMAGE REPORT TYPES
+// =============================================================================
+
+export type DamageStatus = 'DRAFT' | 'REPORTED' | 'ACKNOWLEDGED' | 'RESOLVED';
+export type DamageSeverity = 'MINOR' | 'MODERATE' | 'SEVERE';
+
+export interface DamageImage {
+    id: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    path: string;
+    uploadedAt: string;
+}
+
+export interface DamageReport {
+    id: string;
+    indentId: string;
+    indent?: {
+        id: string;
+        indentNumber: string;
+        name: string;
+        status: IndentStatus;
+        site?: Site;
+    };
+    site?: Site;
+    indentItemId: string | null;
+    indentItem?: IndentItem | null;
+    reportedBy: { name: string };
+    name: string;
+    damagedQty: number | null;
+    description: string;
+    severity: DamageSeverity;
+    status: DamageStatus;
+    submittedAt: string | null;
+    isResolved: boolean;
+    resolvedAt: string | null;
+    resolution: string | null;
+    images: DamageImage[];
+    return?: {
+        id: string;
+        returnNumber: string;
+        status: string;
+    } | null;
+    // Reorder tracking
+    isReordered?: boolean;
+    reorderedAt?: string | null;
+    reorderExpectedDate?: string | null;
+    reorderedBy?: { name: string } | null;
+    createdAt: string;
+}
+
+// =============================================================================
+// ORDER TYPES (Purchase Team)
+// =============================================================================
+
+export interface OrderInvoice {
+    id: string;
+    orderId: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    path: string;
+    uploadedAt: string;
+}
+
+export interface OrderItemInvoice {
+    id: string;
+    orderItemId: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    path: string;
+    uploadedAt: string;
+}
+
+export interface OrderItem {
+    id: string;
+    orderId: string;
+    indentItemId: string | null;
+    materialName: string;
+    materialCode: string;
+    quantity: number;
+    unitPrice: number | null;
+    totalPrice: number | null;
+    // Per-item vendor details
+    vendorName: string | null;
+    vendorAddress: string | null;
+    vendorGstNo: string | null;
+    vendorContactPerson: string | null;
+    vendorContactPhone: string | null;
+    vendorNatureOfBusiness: string | null;
+    // Relations
+    indentItem?: IndentItem | null;
+    invoices?: OrderItemInvoice[];
+}
+
+export interface Order {
+    id: string;
+    orderNumber: string;
+    indentId: string;
+    indent?: Indent;
+    // Vendor details at order level
+    vendorName: string;
+    vendorContact: string | null;
+    vendorEmail: string | null;
+    vendorAddress: string | null;
+    vendorGstNo: string | null;
+    vendorContactPerson: string | null;
+    vendorContactPhone: string | null;
+    vendorNatureOfBusiness: string | null;
+    // Pricing
+    totalAmount: number | null;
+    taxAmount: number | null;
+    shippingAmount: number | null;
+    grandTotal: number | null;
+    // Status
+    expectedDeliveryDate: string | null;
+    actualDeliveryDate: string | null;
+    deliveryStatus: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED';
+    remarks: string | null;
+    // Purchase status
+    isPurchased: boolean;
+    purchasedAt: string | null;
+    // Reorder tracking
+    isReorder: boolean;
+    reorderedAt: string | null;
+    reorderExpectedDate: string | null;
+    reorderReason: string | null;
+    // Relations
+    orderItems: OrderItem[];
+    invoices?: OrderInvoice[];
+    createdAt: string;
 }
 

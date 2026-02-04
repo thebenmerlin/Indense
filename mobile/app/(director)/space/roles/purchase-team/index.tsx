@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { usersApi, User } from '../../../../../src/api/users.api';
 
 const theme = {
     colors: {
@@ -20,30 +21,20 @@ const theme = {
         textSecondary: '#64748B',
         border: '#E2E8F0',
         accent: '#3B82F6',
+        error: '#EF4444',
     }
 };
 
-interface PurchaseMember {
-    id: string;
-    name: string;
-    email: string;
-}
-
 export default function PurchaseTeamList() {
-    const [members, setMembers] = useState<PurchaseMember[]>([]);
+    const [members, setMembers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const router = useRouter();
 
     const fetchMembers = useCallback(async () => {
         try {
-            // TODO: Replace with actual API call
-            setMembers([
-                { id: '1', name: 'Vikram Singh', email: 'vikram@example.com' },
-                { id: '2', name: 'Anita Desai', email: 'anita@example.com' },
-                { id: '3', name: 'Kiran Rao', email: 'kiran@example.com' },
-                { id: '4', name: 'Sanjay Gupta', email: 'sanjay@example.com' },
-            ]);
+            const data = await usersApi.getByRole('PURCHASE_TEAM');
+            setMembers(data);
         } catch (error) {
             console.error('Failed to fetch purchase team:', error);
         } finally {
@@ -61,17 +52,27 @@ export default function PurchaseTeamList() {
         fetchMembers();
     };
 
-    const renderMember = ({ item }: { item: PurchaseMember }) => (
+    const renderMember = ({ item }: { item: User }) => (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, item.isRevoked && styles.revokedCard]}
             onPress={() => router.push(`/(director)/space/roles/purchase-team/${item.id}` as any)}
             activeOpacity={0.7}
         >
-            <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+            <View style={[styles.avatar, item.isRevoked && styles.revokedAvatar]}>
+                <Text style={[styles.avatarText, item.isRevoked && styles.revokedAvatarText]}>
+                    {item.name.charAt(0)}
+                </Text>
             </View>
             <View style={styles.cardContent}>
-                <Text style={styles.name}>{item.name}</Text>
+                <View style={styles.nameRow}>
+                    <Text style={[styles.name, item.isRevoked && styles.revokedText]}>{item.name}</Text>
+                    {item.isRevoked && (
+                        <View style={styles.revokedBadge}>
+                            <Text style={styles.revokedBadgeText}>Revoked</Text>
+                        </View>
+                    )}
+                </View>
+                <Text style={styles.email}>{item.email}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
         </TouchableOpacity>
@@ -121,6 +122,10 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
         elevation: 2,
     },
+    revokedCard: {
+        opacity: 0.7,
+        backgroundColor: theme.colors.surface,
+    },
     avatar: {
         width: 48,
         height: 48,
@@ -130,9 +135,23 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 14,
     },
+    revokedAvatar: {
+        backgroundColor: theme.colors.error + '20',
+    },
     avatarText: { fontSize: 20, fontWeight: '600', color: theme.colors.accent },
+    revokedAvatarText: { color: theme.colors.error },
     cardContent: { flex: 1 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     name: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+    revokedText: { color: theme.colors.textSecondary },
+    revokedBadge: {
+        backgroundColor: theme.colors.error + '15',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    revokedBadgeText: { fontSize: 11, fontWeight: '600', color: theme.colors.error },
+    email: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
     empty: { padding: 48, alignItems: 'center' },
     emptyText: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 16 },
 });

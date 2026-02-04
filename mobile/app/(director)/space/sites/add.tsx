@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,10 +9,12 @@ import {
     Alert,
     Modal,
     FlatList,
+    ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { sitesApi, usersApi, SiteEngineer, User } from '../../../../src/api';
 
 const theme = {
     colors: {
@@ -28,19 +30,16 @@ const theme = {
     }
 };
 
-interface SiteEngineer {
-    id: string;
-    name: string;
-    email: string;
-}
-
 export default function AddSite() {
     const router = useRouter();
     const { edit } = useLocalSearchParams<{ edit?: string }>();
     const isEditing = !!edit;
 
     const [name, setName] = useState('');
-    const [location, setLocation] = useState('');
+    const [code, setCode] = useState('');
+    const [city, setCity] = useState('');
+    const [state, setState] = useState('');
+    const [address, setAddress] = useState('');
     const [startDate, setStartDate] = useState<Date | null>(null);
     const [expectedHandover, setExpectedHandover] = useState<Date | null>(null);
     const [engineers, setEngineers] = useState<SiteEngineer[]>([]);
@@ -48,12 +47,26 @@ export default function AddSite() {
     const [showHandoverPicker, setShowHandoverPicker] = useState(false);
     const [showEngineerPicker, setShowEngineerPicker] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [loadingEngineers, setLoadingEngineers] = useState(false);
+    const [availableEngineers, setAvailableEngineers] = useState<SiteEngineer[]>([]);
 
-    const [availableEngineers] = useState<SiteEngineer[]>([
-        { id: '1', name: 'Rajesh Kumar', email: 'rajesh@example.com' },
-        { id: '2', name: 'Priya Sharma', email: 'priya@example.com' },
-        { id: '3', name: 'Amit Patel', email: 'amit@example.com' },
-    ]);
+    // Fetch available engineers (all site engineers)
+    const fetchAvailableEngineers = async () => {
+        setLoadingEngineers(true);
+        try {
+            const users = await usersApi.getByRole('SITE_ENGINEER');
+            // Filter out already selected engineers
+            const selectedIds = new Set(engineers.map(e => e.id));
+            const available = users
+                .filter(u => !u.isRevoked && !selectedIds.has(u.id))
+                .map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone }));
+            setAvailableEngineers(available);
+        } catch (error) {
+            console.error('Failed to fetch engineers:', error);
+        } finally {
+            setLoadingEngineers(false);
+        }
+    };
 
     const formatDate = (date: Date | null) => {
         if (!date) return 'Select date';
@@ -67,12 +80,41 @@ export default function AddSite() {
     const handleAddEngineer = (engineer: SiteEngineer) => {
         if (!engineers.find(e => e.id === engineer.id)) {
             setEngineers([...engineers, engineer]);
+            setAvailableEngineers(prev => prev.filter(e => e.id !== engineer.id));
         }
         setShowEngineerPicker(false);
     };
 
     const handleRemoveEngineer = (id: string) => {
+        const removed = engineers.find(e => e.id === id);
         setEngineers(engineers.filter(e => e.id !== id));
+        if (removed) {
+            setAvailableEngineers(prev => [...prev, removed]);
+        }
+    };
+
+    const generateCode = (siteName: string) => {
+        // Generate a code from the site name (first letters of each word, uppercase)
+        const words = siteName.trim().split(/\s+/);
+        let generatedCode = words
+            .slice(0, 3)
+            .map(w => w.charAt(0).toUpperCase())
+            .join('');
+        
+        // If code is too short, pad with more characters
+        if (generatedCode.length < 2 && words[0]) {
+            generatedCode = words[0].substring(0, 3).toUpperCase();
+        }
+        
+        return generatedCode;
+    };
+
+    const handleNameChange = (text: string) => {
+        setName(text);
+        // Auto-generate code if not manually edited
+        if (!isEditing) {
+            setCode(generateCode(text));
+        }
     };
 
     const handleSave = async () => {
@@ -80,23 +122,41 @@ export default function AddSite() {
             Alert.alert('Error', 'Please enter the project name');
             return;
         }
-        if (!location.trim()) {
-            Alert.alert('Error', 'Please enter the site location');
+        if (!code.trim()) {
+            Alert.alert('Error', 'Please enter the site code');
+            return;
+        }
+        if (!city.trim()) {
+            Alert.alert('Error', 'Please enter the city');
             return;
         }
 
         setSaving(true);
         try {
-            // TODO: API call to save site
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            Alert.alert('Success', isEditing ? 'Site updated successfully' : 'Site added successfully', [
+            await sitesApi.create({
+                name: name.trim(),
+                code: code.trim().toUpperCase(),
+                city: city.trim(),
+                state: state.trim() || undefined,
+                address: address.trim() || undefined,
+                startDate: startDate?.toISOString(),
+                expectedHandoverDate: expectedHandover?.toISOString(),
+                engineerIds: engineers.map(e => e.id),
+            });
+            Alert.alert('Success', 'Site created successfully', [
                 { text: 'OK', onPress: () => router.back() }
             ]);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to save site');
+        } catch (error: any) {
+            const message = error.response?.data?.message || 'Failed to save site';
+            Alert.alert('Error', message);
         } finally {
             setSaving(false);
         }
+    };
+
+    const openEngineerPicker = () => {
+        fetchAvailableEngineers();
+        setShowEngineerPicker(true);
     };
 
     return (
@@ -109,20 +169,59 @@ export default function AddSite() {
                         style={styles.input}
                         placeholder="Enter project name"
                         value={name}
-                        onChangeText={setName}
+                        onChangeText={handleNameChange}
                         placeholderTextColor={theme.colors.textSecondary}
                     />
                 </View>
 
-                {/* Site Location */}
+                {/* Site Code */}
                 <View style={styles.field}>
-                    <Text style={styles.label}>Site Location *</Text>
+                    <Text style={styles.label}>Site Code *</Text>
                     <TextInput
                         style={styles.input}
-                        placeholder="Enter city or location"
-                        value={location}
-                        onChangeText={setLocation}
+                        placeholder="e.g., GVR"
+                        value={code}
+                        onChangeText={(text) => setCode(text.toUpperCase())}
                         placeholderTextColor={theme.colors.textSecondary}
+                        autoCapitalize="characters"
+                        maxLength={10}
+                    />
+                </View>
+
+                {/* City */}
+                <View style={styles.field}>
+                    <Text style={styles.label}>City *</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter city"
+                        value={city}
+                        onChangeText={setCity}
+                        placeholderTextColor={theme.colors.textSecondary}
+                    />
+                </View>
+
+                {/* State */}
+                <View style={styles.field}>
+                    <Text style={styles.label}>State</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter state"
+                        value={state}
+                        onChangeText={setState}
+                        placeholderTextColor={theme.colors.textSecondary}
+                    />
+                </View>
+
+                {/* Address */}
+                <View style={styles.field}>
+                    <Text style={styles.label}>Address</Text>
+                    <TextInput
+                        style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                        placeholder="Enter full address"
+                        value={address}
+                        onChangeText={setAddress}
+                        placeholderTextColor={theme.colors.textSecondary}
+                        multiline
                     />
                 </View>
 
@@ -147,7 +246,7 @@ export default function AddSite() {
                 {/* Add Site Engineers */}
                 <View style={styles.field}>
                     <Text style={styles.label}>Site Engineers</Text>
-                    <TouchableOpacity style={styles.addEngineerButton} onPress={() => setShowEngineerPicker(true)}>
+                    <TouchableOpacity style={styles.addEngineerButton} onPress={openEngineerPicker}>
                         <Ionicons name="add-circle-outline" size={20} color={theme.colors.primary} />
                         <Text style={styles.addEngineerText}>Add Site Engineer</Text>
                     </TouchableOpacity>
@@ -221,8 +320,13 @@ export default function AddSite() {
                             <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
                         </TouchableOpacity>
                     </View>
+                    {loadingEngineers ? (
+                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                            <ActivityIndicator size="large" color={theme.colors.primary} />
+                        </View>
+                    ) : (
                     <FlatList
-                        data={availableEngineers.filter(e => !engineers.find(eng => eng.id === e.id))}
+                        data={availableEngineers}
                         keyExtractor={item => item.id}
                         contentContainerStyle={{ padding: 16 }}
                         renderItem={({ item }) => (
@@ -238,9 +342,10 @@ export default function AddSite() {
                             </TouchableOpacity>
                         )}
                         ListEmptyComponent={
-                            <Text style={styles.emptyText}>All engineers are already assigned</Text>
+                            <Text style={styles.emptyText}>No available engineers to assign</Text>
                         }
                     />
+                    )}
                 </View>
             </Modal>
         </View>

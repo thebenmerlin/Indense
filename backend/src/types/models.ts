@@ -164,6 +164,13 @@ export interface OrderItemInput {
     specifications?: Record<string, string>;
     quantity: number;
     unitPrice?: number;
+    // Per-item vendor details (optional)
+    vendorName?: string;
+    vendorAddress?: string;
+    vendorGstNo?: string;
+    vendorContactPerson?: string;
+    vendorContactPhone?: string;
+    vendorNatureOfBusiness?: string;
 }
 
 export interface CreateOrderDto {
@@ -172,6 +179,10 @@ export interface CreateOrderDto {
     vendorContact?: string;
     vendorEmail?: string;
     vendorAddress?: string;
+    vendorGstNo?: string;
+    vendorContactPerson?: string;
+    vendorContactPhone?: string;
+    vendorNatureOfBusiness?: string;
     totalAmount?: number;
     taxAmount?: number;
     shippingAmount?: number;
@@ -185,6 +196,10 @@ export interface UpdateOrderDto {
     vendorContact?: string;
     vendorEmail?: string;
     vendorAddress?: string;
+    vendorGstNo?: string;
+    vendorContactPerson?: string;
+    vendorContactPhone?: string;
+    vendorNatureOfBusiness?: string;
     totalAmount?: number;
     taxAmount?: number;
     shippingAmount?: number;

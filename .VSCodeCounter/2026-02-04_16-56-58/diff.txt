@@ -1,0 +1,328 @@
+Date : 2026-02-04 16:56:58
+Directory : /Users/gajanan/Documents/Indense/scraps/mobile
+Total : 202 files,  -2945 codes, -277 comments, 274 blanks, all -2948 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| TypeScript JSX     |         79 |     21,205 |        362 |      1,419 |     22,986 |
+| JSON               |          6 |      1,912 |          0 |          1 |      1,913 |
+| Gradle             |          3 |        145 |         69 |         34 |        248 |
+| XML                |         12 |        100 |         23 |         10 |        133 |
+| Batch              |          1 |         41 |         32 |         22 |         95 |
+| Java Properties    |          2 |         21 |         37 |         16 |         74 |
+| JavaScript         |          1 |          6 |          0 |          1 |          7 |
+| JSON with Comments |          2 |         -9 |          0 |          1 |         -8 |
+| MS SQL             |          5 |       -442 |       -187 |       -178 |       -807 |
+| TypeScript         |         91 |    -25,924 |       -613 |     -1,052 |    -27,589 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++--------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                     | files      | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                        |        202 |     -2,945 |       -277 |        274 |     -2,948 |
+| . (Files)                                                                                                                |          6 |      9,944 |          0 |          4 |      9,948 |
+| ..                                                                                                                       |         80 |    -35,973 |     -1,051 |     -1,489 |    -38,513 |
+| ../backend                                                                                                               |         80 |    -35,973 |     -1,051 |     -1,489 |    -38,513 |
+| ../backend (Files)                                                                                                       |          3 |     -8,035 |          0 |         -1 |     -8,036 |
+| ../backend/prisma                                                                                                        |          8 |    -20,376 |       -268 |       -253 |    -20,897 |
+| ../backend/prisma (Files)                                                                                                |          3 |    -19,934 |        -81 |        -75 |    -20,090 |
+| ../backend/prisma/migrations                                                                                             |          5 |       -442 |       -187 |       -178 |       -807 |
+| ../backend/prisma/migrations/20251221234553_testing1                                                                     |          1 |       -293 |        -94 |       -110 |       -497 |
+| ../backend/prisma/migrations/20260116202254_init_with_item_groups                                                        |          1 |        -33 |        -23 |        -16 |        -72 |
+| ../backend/prisma/migrations/20260201113351_auth_multisite_updates                                                       |          1 |        -43 |        -32 |        -23 |        -98 |
+| ../backend/prisma/migrations/20260204091341_pt_vendor_invoice_updates                                                    |          1 |        -72 |        -37 |        -28 |       -137 |
+| ../backend/prisma/migrations/20260204095828_add_reordered_by_relation                                                    |          1 |         -1 |         -1 |         -1 |         -3 |
+| ../backend/src                                                                                                           |         69 |     -7,562 |       -783 |     -1,235 |     -9,580 |
+| ../backend/src (Files)                                                                                                   |          2 |        -96 |        -14 |        -25 |       -135 |
+| ../backend/src/config                                                                                                    |          4 |        -64 |         -2 |        -23 |        -89 |
+| ../backend/src/middleware                                                                                                |          7 |       -362 |        -93 |        -77 |       -532 |
+| ../backend/src/modules                                                                                                   |         46 |     -6,382 |       -582 |       -993 |     -7,957 |
+| ../backend/src/modules/auth                                                                                              |          4 |       -759 |       -133 |       -137 |     -1,029 |
+| ../backend/src/modules/indents                                                                                           |          5 |       -870 |       -121 |       -142 |     -1,133 |
+| ../backend/src/modules/itemGroups                                                                                        |          3 |       -139 |        -17 |        -25 |       -181 |
+| ../backend/src/modules/materials                                                                                         |          4 |       -225 |        -21 |        -35 |       -281 |
+| ../backend/src/modules/notifications                                                                                     |          4 |       -335 |        -37 |        -45 |       -417 |
+| ../backend/src/modules/orders                                                                                            |          4 |       -686 |        -34 |        -94 |       -814 |
+| ../backend/src/modules/receipts                                                                                          |          4 |       -431 |        -19 |        -77 |       -527 |
+| ../backend/src/modules/reports                                                                                           |          3 |       -735 |        -43 |       -122 |       -900 |
+| ../backend/src/modules/returns                                                                                           |          4 |       -998 |        -52 |       -147 |     -1,197 |
+| ../backend/src/modules/sites                                                                                             |          4 |       -452 |        -38 |        -70 |       -560 |
+| ../backend/src/modules/uom                                                                                               |          3 |       -145 |        -17 |        -25 |       -187 |
+| ../backend/src/modules/users                                                                                             |          4 |       -607 |        -50 |        -74 |       -731 |
+| ../backend/src/types                                                                                                     |          4 |       -327 |        -30 |        -48 |       -405 |
+| ../backend/src/utils                                                                                                     |          6 |       -331 |        -62 |        -69 |       -462 |
+| android                                                                                                                  |         17 |        303 |        161 |         81 |        545 |
+| android (Files)                                                                                                          |          4 |        108 |         70 |         48 |        226 |
+| android/app                                                                                                              |         12 |        188 |         91 |         32 |        311 |
+| android/app (Files)                                                                                                      |          1 |         92 |         68 |         23 |        183 |
+| android/app/src                                                                                                          |         11 |         96 |         23 |          9 |        128 |
+| android/app/src/debug                                                                                                    |          1 |          5 |          0 |          3 |          8 |
+| android/app/src/debugOptimized                                                                                           |          1 |          5 |          0 |          3 |          8 |
+| android/app/src/main                                                                                                     |          9 |         86 |         23 |          3 |        112 |
+| android/app/src/main (Files)                                                                                             |          1 |         32 |          0 |          0 |         32 |
+| android/app/src/main/res                                                                                                 |          8 |         54 |         23 |          3 |         80 |
+| android/app/src/main/res/drawable                                                                                        |          2 |         18 |         23 |          3 |         44 |
+| android/app/src/main/res/mipmap-anydpi-v26                                                                               |          2 |         10 |          0 |          0 |         10 |
+| android/app/src/main/res/values                                                                                          |          3 |         25 |          0 |          0 |         25 |
+| android/app/src/main/res/values-night                                                                                    |          1 |          1 |          0 |          0 |          1 |
+| android/gradle                                                                                                           |          1 |          7 |          0 |          1 |          8 |
+| android/gradle/wrapper                                                                                                   |          1 |          7 |          0 |          1 |          8 |
+| app                                                                                                                      |         69 |     19,783 |        331 |      1,301 |     21,415 |
+| app (Files)                                                                                                              |          2 |        102 |          5 |         18 |        125 |
+| app/(auth)                                                                                                               |          4 |      1,554 |         17 |        131 |      1,702 |
+| app/(director)                                                                                                           |         33 |      8,326 |        136 |        547 |      9,009 |
+| app/(director) (Files)                                                                                                   |          4 |        614 |         13 |         35 |        662 |
+| app/(director)/analytics                                                                                                 |          5 |      1,029 |         16 |         73 |      1,118 |
+| app/(director)/indents                                                                                                   |         10 |      2,690 |         37 |        187 |      2,914 |
+| app/(director)/indents (Files)                                                                                           |          2 |        513 |          0 |         30 |        543 |
+| app/(director)/indents/all                                                                                               |          2 |        580 |          9 |         39 |        628 |
+| app/(director)/indents/damaged                                                                                           |          2 |        454 |          7 |         33 |        494 |
+| app/(director)/indents/partial                                                                                           |          2 |        471 |          8 |         38 |        517 |
+| app/(director)/indents/pending                                                                                           |          2 |        672 |         13 |         47 |        732 |
+| app/(director)/space                                                                                                     |         14 |      3,993 |         70 |        252 |      4,315 |
+| app/(director)/space (Files)                                                                                             |          1 |        101 |          0 |         11 |        112 |
+| app/(director)/space/materials                                                                                           |          3 |        828 |         27 |         57 |        912 |
+| app/(director)/space/roles                                                                                               |          7 |      1,966 |         14 |        112 |      2,092 |
+| app/(director)/space/roles (Files)                                                                                       |          1 |        149 |          0 |         14 |        163 |
+| app/(director)/space/roles/directors                                                                                     |          2 |        546 |          4 |         30 |        580 |
+| app/(director)/space/roles/engineers                                                                                     |          2 |        575 |          5 |         32 |        612 |
+| app/(director)/space/roles/purchase-team                                                                                 |          2 |        696 |          5 |         36 |        737 |
+| app/(director)/space/sites                                                                                               |          3 |      1,098 |         29 |         72 |      1,199 |
+| app/(purchase-team)                                                                                                      |         20 |      5,631 |        104 |        379 |      6,114 |
+| app/(purchase-team) (Files)                                                                                              |          4 |        794 |         17 |         42 |        853 |
+| app/(purchase-team)/analytics                                                                                            |          5 |      1,041 |         24 |         72 |      1,137 |
+| app/(purchase-team)/damages                                                                                              |          2 |        717 |         13 |         39 |        769 |
+| app/(purchase-team)/indents                                                                                              |          2 |        573 |         10 |         50 |        633 |
+| app/(purchase-team)/orders                                                                                               |          3 |      1,152 |         16 |         78 |      1,246 |
+| app/(purchase-team)/partial                                                                                              |          2 |        647 |         13 |         50 |        710 |
+| app/(purchase-team)/pending                                                                                              |          2 |        707 |         11 |         48 |        766 |
+| app/(site-engineer)                                                                                                      |         10 |      4,170 |         69 |        226 |      4,465 |
+| app/(site-engineer) (Files)                                                                                              |          3 |        667 |          9 |         25 |        701 |
+| app/(site-engineer)/damages                                                                                              |          2 |        978 |         17 |         54 |      1,049 |
+| app/(site-engineer)/indents                                                                                              |          3 |      1,726 |         32 |         97 |      1,855 |
+| app/(site-engineer)/receipts                                                                                             |          2 |        799 |         11 |         50 |        860 |
+| assets                                                                                                                   |          1 |          4 |          0 |          1 |          5 |
+| assets/images                                                                                                            |          1 |          4 |          0 |          1 |          5 |
+| src                                                                                                                      |         29 |      2,994 |        282 |        376 |      3,652 |
+| src/api                                                                                                                  |          8 |      1,019 |        178 |        178 |      1,375 |
+| src/components                                                                                                           |         10 |      1,311 |         21 |         99 |      1,431 |
+| src/components (Files)                                                                                                   |          4 |      1,036 |         17 |         70 |      1,123 |
+| src/components/common                                                                                                    |          6 |        275 |          4 |         29 |        308 |
+| src/constants                                                                                                            |          4 |        153 |         15 |         19 |        187 |
+| src/context                                                                                                              |          2 |        117 |         10 |         21 |        148 |
+| src/services                                                                                                             |          1 |         79 |         30 |         18 |        127 |
+| src/types                                                                                                                |          3 |        285 |         28 |         31 |        344 |
+| src/utils                                                                                                                |          1 |         30 |          0 |         10 |         40 |
++--------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++--------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                                                 | language           | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| /Users/gajanan/Documents/Indense/scraps/backend/package-lock.json                                                        | JSON               |     -7,929 |          0 |         -1 |     -7,930 |
+| /Users/gajanan/Documents/Indense/scraps/backend/package.json                                                             | JSON               |        -55 |          0 |          0 |        -55 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/materialsData.ts                                                  | TypeScript         |    -19,212 |         -1 |         -1 |    -19,214 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/migrations/20251221234553_testing1/migration.sql                  | MS SQL             |       -293 |        -94 |       -110 |       -497 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/migrations/20260116202254_init_with_item_groups/migration.sql     | MS SQL             |        -33 |        -23 |        -16 |        -72 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/migrations/20260201113351_auth_multisite_updates/migration.sql    | MS SQL             |        -43 |        -32 |        -23 |        -98 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/migrations/20260204091341_pt_vendor_invoice_updates/migration.sql | MS SQL             |        -72 |        -37 |        -28 |       -137 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/migrations/20260204095828_add_reordered_by_relation/migration.sql | MS SQL             |         -1 |         -1 |         -1 |         -3 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/seed.ts                                                           | TypeScript         |       -489 |        -25 |        -24 |       -538 |
+| /Users/gajanan/Documents/Indense/scraps/backend/prisma/seedMaterials.ts                                                  | TypeScript         |       -233 |        -55 |        -50 |       -338 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/app.ts                                                               | TypeScript         |        -59 |         -9 |        -15 |        -83 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/config/auth.ts                                                       | TypeScript         |        -15 |          0 |         -5 |        -20 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/config/database.ts                                                   | TypeScript         |        -12 |         -2 |         -5 |        -19 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/config/index.ts                                                      | TypeScript         |        -22 |          0 |         -8 |        -30 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/config/storage.ts                                                    | TypeScript         |        -15 |          0 |         -5 |        -20 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/index.ts                                                             | TypeScript         |        -37 |         -5 |        -10 |        -52 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/middleware/auditLog.ts                                               | TypeScript         |        -81 |        -15 |        -11 |       -107 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/middleware/authenticate.ts                                           | TypeScript         |        -72 |        -12 |        -15 |        -99 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/middleware/authorize.ts                                              | TypeScript         |        -29 |        -20 |        -11 |        -60 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/middleware/errorHandler.ts                                           | TypeScript         |        -85 |        -15 |        -14 |       -114 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/middleware/index.ts                                                  | TypeScript         |         -6 |          0 |         -1 |         -7 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/middleware/siteFilter.ts                                             | TypeScript         |        -64 |        -24 |        -16 |       -104 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/middleware/validateRequest.ts                                        | TypeScript         |        -25 |         -7 |         -9 |        -41 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/auth/auth.controller.ts                                      | TypeScript         |       -170 |        -48 |        -37 |       -255 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/auth/auth.routes.ts                                          | TypeScript         |        -75 |        -17 |        -17 |       -109 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/auth/auth.service.ts                                         | TypeScript         |       -402 |        -67 |        -71 |       -540 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/auth/auth.validation.ts                                      | TypeScript         |       -112 |         -1 |        -12 |       -125 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/indents/indents.controller.ts                                | TypeScript         |       -174 |          0 |        -21 |       -195 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/indents/indents.routes.ts                                    | TypeScript         |        -66 |        -11 |        -15 |        -92 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/indents/indents.service.ts                                   | TypeScript         |       -495 |        -67 |        -87 |       -649 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/indents/indents.stateMachine.ts                              | TypeScript         |        -82 |        -43 |        -13 |       -138 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/indents/indents.validation.ts                                | TypeScript         |        -53 |          0 |         -6 |        -59 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/itemGroups/itemGroups.controller.ts                          | TypeScript         |        -51 |          0 |         -7 |        -58 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/itemGroups/itemGroups.routes.ts                              | TypeScript         |        -12 |         -2 |         -6 |        -20 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/itemGroups/itemGroups.service.ts                             | TypeScript         |        -76 |        -15 |        -12 |       -103 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/materials/materials.controller.ts                            | TypeScript         |        -66 |         -4 |         -9 |        -79 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/materials/materials.routes.ts                                | TypeScript         |        -20 |         -2 |         -6 |        -28 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/materials/materials.service.ts                               | TypeScript         |       -130 |        -15 |        -17 |       -162 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/materials/materials.validation.ts                            | TypeScript         |         -9 |          0 |         -3 |        -12 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/notifications/notifications.controller.ts                    | TypeScript         |        -64 |          0 |         -9 |        -73 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/notifications/notifications.routes.ts                        | TypeScript         |        -12 |          0 |         -6 |        -18 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/notifications/notifications.service.ts                       | TypeScript         |       -139 |        -34 |        -23 |       -196 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/notifications/notifications.types.ts                         | TypeScript         |       -120 |         -3 |         -7 |       -130 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/orders/orders.controller.ts                                  | TypeScript         |       -149 |          0 |        -13 |       -162 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/orders/orders.routes.ts                                      | TypeScript         |        -81 |         -8 |        -16 |       -105 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/orders/orders.service.ts                                     | TypeScript         |       -405 |        -26 |        -61 |       -492 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/orders/orders.validation.ts                                  | TypeScript         |        -51 |          0 |         -4 |        -55 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/receipts/receipts.controller.ts                              | TypeScript         |       -103 |          0 |         -9 |       -112 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/receipts/receipts.routes.ts                                  | TypeScript         |        -58 |         -7 |        -13 |        -78 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/receipts/receipts.service.ts                                 | TypeScript         |       -253 |        -12 |        -51 |       -316 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/receipts/receipts.validation.ts                              | TypeScript         |        -17 |          0 |         -4 |        -21 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/reports/reports.controller.ts                                | TypeScript         |       -160 |         -5 |        -27 |       -192 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/reports/reports.routes.ts                                    | TypeScript         |        -21 |         -6 |        -10 |        -37 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/reports/reports.service.ts                                   | TypeScript         |       -554 |        -32 |        -85 |       -671 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/returns/returns.controller.ts                                | TypeScript         |       -269 |          0 |        -20 |       -289 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/returns/returns.routes.ts                                    | TypeScript         |       -101 |         -7 |        -22 |       -130 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/returns/returns.service.ts                                   | TypeScript         |       -603 |        -45 |       -100 |       -748 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/returns/returns.validation.ts                                | TypeScript         |        -25 |          0 |         -5 |        -30 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/sites/sites.controller.ts                                    | TypeScript         |       -103 |         -4 |        -15 |       -122 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/sites/sites.routes.ts                                        | TypeScript         |        -39 |         -6 |         -9 |        -54 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/sites/sites.service.ts                                       | TypeScript         |       -266 |        -28 |        -42 |       -336 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/sites/sites.validation.ts                                    | TypeScript         |        -44 |          0 |         -4 |        -48 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/uom/uom.controller.ts                                        | TypeScript         |        -51 |          0 |         -7 |        -58 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/uom/uom.routes.ts                                            | TypeScript         |        -12 |         -2 |         -6 |        -20 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/uom/uom.service.ts                                           | TypeScript         |        -82 |        -15 |        -12 |       -109 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/users/users.controller.ts                                    | TypeScript         |       -135 |          0 |        -16 |       -151 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/users/users.routes.ts                                        | TypeScript         |        -33 |         -3 |         -6 |        -42 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/users/users.service.ts                                       | TypeScript         |       -397 |        -47 |        -48 |       -492 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/modules/users/users.validation.ts                                    | TypeScript         |        -42 |          0 |         -4 |        -46 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/types/enums.ts                                                       | TypeScript         |        -50 |        -11 |        -10 |        -71 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/types/express.d.ts                                                   | TypeScript         |        -30 |         -4 |         -6 |        -40 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/types/index.ts                                                       | TypeScript         |         -2 |          0 |         -1 |         -3 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/types/models.ts                                                      | TypeScript         |       -245 |        -15 |        -31 |       -291 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/utils/errors.ts                                                      | TypeScript         |        -67 |         -9 |        -14 |        -90 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/utils/index.ts                                                       | TypeScript         |         -4 |          0 |         -1 |         -5 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/utils/logger.ts                                                      | TypeScript         |        -48 |         -4 |        -10 |        -62 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/utils/pagination.ts                                                  | TypeScript         |        -44 |         -9 |         -9 |        -62 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/utils/pushNotifications.ts                                           | TypeScript         |       -116 |        -21 |        -20 |       -157 |
+| /Users/gajanan/Documents/Indense/scraps/backend/src/utils/visibility.ts                                                  | TypeScript         |        -52 |        -19 |        -15 |        -86 |
+| /Users/gajanan/Documents/Indense/scraps/backend/tsconfig.json                                                            | JSON with Comments |        -51 |          0 |          0 |        -51 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/build.gradle                                                  | Gradle             |         92 |         68 |         23 |        183 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/debug/AndroidManifest.xml                                 | XML                |          5 |          0 |          3 |          8 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/debugOptimized/AndroidManifest.xml                        | XML                |          5 |          0 |          3 |          8 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/AndroidManifest.xml                                  | XML                |         32 |          0 |          0 |         32 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/drawable/ic_launcher_background.xml              | XML                |          6 |          0 |          0 |          6 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/drawable/rn_edit_text_material.xml               | XML                |         12 |         23 |          3 |         38 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml                | XML                |          5 |          0 |          0 |          5 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml          | XML                |          5 |          0 |          0 |          5 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values-night/colors.xml                          | XML                |          1 |          0 |          0 |          1 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values/colors.xml                                | XML                |          6 |          0 |          0 |          6 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values/strings.xml                               | XML                |          5 |          0 |          0 |          5 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values/styles.xml                                | XML                |         14 |          0 |          0 |         14 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/build.gradle                                                      | Gradle             |         20 |          1 |          4 |         25 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/gradle.properties                                                 | Java Properties    |         14 |         37 |         15 |         66 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/gradle/wrapper/gradle-wrapper.properties                          | Java Properties    |          7 |          0 |          1 |          8 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/gradlew.bat                                                       | Batch              |         41 |         32 |         22 |         95 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/android/settings.gradle                                                   | Gradle             |         33 |          0 |          7 |         40 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app.json                                                                  | JSON               |         50 |          0 |          0 |         50 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/_layout.tsx                                                    | TypeScript JSX     |          9 |          0 |          2 |         11 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/forgot-password.tsx                                            | TypeScript JSX     |        519 |          8 |         43 |        570 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/login.tsx                                                      | TypeScript JSX     |        348 |          4 |         28 |        380 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/register.tsx                                                   | TypeScript JSX     |        678 |          5 |         58 |        741 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/_layout.tsx                                                | TypeScript JSX     |         42 |          0 |          2 |         44 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/account.tsx                                                | TypeScript JSX     |        367 |          9 |         15 |        391 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/damage-report.tsx                                | TypeScript JSX     |        192 |          3 |         16 |        211 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/financial.tsx                                    | TypeScript JSX     |        207 |          5 |         16 |        228 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/index.tsx                                        | TypeScript JSX     |        318 |          6 |         18 |        342 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/materials.tsx                                    | TypeScript JSX     |        145 |          1 |         10 |        156 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/vendors.tsx                                      | TypeScript JSX     |        167 |          1 |         13 |        181 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/dashboard.tsx                                              | TypeScript JSX     |        159 |          4 |         14 |        177 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/[id].tsx                                           | TypeScript JSX     |        322 |          0 |         19 |        341 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/all/[id].tsx                                       | TypeScript JSX     |        344 |          6 |         22 |        372 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/all/index.tsx                                      | TypeScript JSX     |        236 |          3 |         17 |        256 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/damaged/[id].tsx                                   | TypeScript JSX     |        277 |          5 |         20 |        302 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/damaged/index.tsx                                  | TypeScript JSX     |        177 |          2 |         13 |        192 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/index.tsx                                          | TypeScript JSX     |        191 |          0 |         11 |        202 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/partial/[id].tsx                                   | TypeScript JSX     |        296 |          6 |         25 |        327 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/partial/index.tsx                                  | TypeScript JSX     |        175 |          2 |         13 |        190 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/pending/[id].tsx                                   | TypeScript JSX     |        405 |          9 |         28 |        442 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/pending/index.tsx                                  | TypeScript JSX     |        267 |          4 |         19 |        290 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/reports.tsx                                                | TypeScript JSX     |         46 |          0 |          4 |         50 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/index.tsx                                            | TypeScript JSX     |        101 |          0 |         11 |        112 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/materials/[id].tsx                                   | TypeScript JSX     |        312 |         12 |         20 |        344 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/materials/add.tsx                                    | TypeScript JSX     |        238 |          9 |         18 |        265 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/materials/index.tsx                                  | TypeScript JSX     |        278 |          6 |         19 |        303 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/directors/[id].tsx                             | TypeScript JSX     |        398 |          4 |         20 |        422 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/directors/index.tsx                            | TypeScript JSX     |        148 |          0 |         10 |        158 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/engineers/[id].tsx                             | TypeScript JSX     |        421 |          5 |         21 |        447 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/engineers/index.tsx                            | TypeScript JSX     |        154 |          0 |         11 |        165 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/index.tsx                                      | TypeScript JSX     |        149 |          0 |         14 |        163 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/purchase-team/[id].tsx                         | TypeScript JSX     |        548 |          5 |         26 |        579 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/purchase-team/index.tsx                        | TypeScript JSX     |        148 |          0 |         10 |        158 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/sites/[id].tsx                                       | TypeScript JSX     |        528 |         10 |         32 |        570 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/sites/add.tsx                                        | TypeScript JSX     |        408 |         17 |         29 |        454 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/sites/index.tsx                                      | TypeScript JSX     |        162 |          2 |         11 |        175 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/_layout.tsx                                           | TypeScript JSX     |         32 |          0 |          2 |         34 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/account.tsx                                           | TypeScript JSX     |        378 |          9 |         17 |        404 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/damage-report.tsx                           | TypeScript JSX     |        167 |          4 |         14 |        185 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/financial.tsx                               | TypeScript JSX     |        176 |          6 |         12 |        194 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/index.tsx                                   | TypeScript JSX     |        363 |          6 |         23 |        392 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/materials.tsx                               | TypeScript JSX     |        147 |          4 |         10 |        161 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/vendors.tsx                                 | TypeScript JSX     |        188 |          4 |         13 |        205 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/damages/[id].tsx                                      | TypeScript JSX     |        391 |         10 |         23 |        424 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/damages/index.tsx                                     | TypeScript JSX     |        326 |          3 |         16 |        345 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/dashboard.tsx                                         | TypeScript JSX     |        338 |          8 |         19 |        365 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/indents/[id].tsx                                      | TypeScript JSX     |        300 |          8 |         30 |        338 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/indents/index.tsx                                     | TypeScript JSX     |        273 |          2 |         20 |        295 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/orders/[id].tsx                                       | TypeScript JSX     |        625 |         12 |         40 |        677 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/orders/index.tsx                                      | TypeScript JSX     |        271 |          2 |         22 |        295 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/orders/select.tsx                                     | TypeScript JSX     |        256 |          2 |         16 |        274 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/partial/[id].tsx                                      | TypeScript JSX     |        373 |         11 |         31 |        415 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/partial/index.tsx                                     | TypeScript JSX     |        274 |          2 |         19 |        295 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/pending/[id].tsx                                      | TypeScript JSX     |        405 |          5 |         27 |        437 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/pending/index.tsx                                     | TypeScript JSX     |        302 |          6 |         21 |        329 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/reports.tsx                                           | TypeScript JSX     |         46 |          0 |          4 |         50 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/_layout.tsx                                           | TypeScript JSX     |         38 |          0 |          2 |         40 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/account.tsx                                           | TypeScript JSX     |        437 |          9 |         15 |        461 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/damages/[id].tsx                                      | TypeScript JSX     |        578 |         11 |         38 |        627 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/damages/index.tsx                                     | TypeScript JSX     |        400 |          6 |         16 |        422 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/dashboard.tsx                                         | TypeScript JSX     |        192 |          0 |          8 |        200 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/indents/[id].tsx                                      | TypeScript JSX     |        754 |         13 |         38 |        805 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/indents/create.tsx                                    | TypeScript JSX     |        624 |         17 |         37 |        678 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/indents/index.tsx                                     | TypeScript JSX     |        348 |          2 |         22 |        372 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/receipts/[id].tsx                                     | TypeScript JSX     |        520 |          8 |         33 |        561 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/receipts/index.tsx                                    | TypeScript JSX     |        279 |          3 |         17 |        299 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/_layout.tsx                                                           | TypeScript JSX     |         64 |          4 |         10 |         78 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/app/index.tsx                                                             | TypeScript JSX     |         38 |          1 |          8 |         47 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/assets/images/icon.svg                                                    | XML                |          4 |          0 |          1 |          5 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/babel.config.js                                                           | JavaScript         |          6 |          0 |          1 |          7 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/eas.json                                                                  | JSON               |         25 |          0 |          0 |         25 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/package-lock.json                                                         | JSON               |      9,778 |          0 |          1 |      9,779 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/package.json                                                              | JSON               |         43 |          0 |          1 |         44 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/auth.api.ts                                                       | TypeScript         |         23 |          0 |          7 |         30 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/client.ts                                                         | TypeScript         |         82 |          7 |         16 |        105 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/indents.api.ts                                                    | TypeScript         |        572 |         53 |         87 |        712 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/index.ts                                                          | TypeScript         |         10 |          0 |          2 |         12 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/materials.api.ts                                                  | TypeScript         |         93 |         24 |         15 |        132 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/notifications.api.ts                                              | TypeScript         |         53 |         21 |         12 |         86 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/sites.api.ts                                                      | TypeScript         |        110 |         40 |         22 |        172 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/api/users.api.ts                                                      | TypeScript         |         76 |         33 |         17 |        126 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/AddMaterialModal.tsx                                       | TypeScript JSX     |        365 |          8 |         25 |        398 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/ErrorBoundary.tsx                                          | TypeScript JSX     |         89 |          0 |         10 |         99 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/FilterModal.tsx                                            | TypeScript JSX     |        289 |          4 |         15 |        308 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/NotificationCenter.tsx                                     | TypeScript JSX     |        293 |          5 |         20 |        318 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Badge.tsx                                           | TypeScript JSX     |         30 |          0 |          6 |         36 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Button.tsx                                          | TypeScript JSX     |        131 |          4 |          7 |        142 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Card.tsx                                            | TypeScript JSX     |         31 |          0 |          5 |         36 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Input.tsx                                           | TypeScript JSX     |         55 |          0 |          5 |         60 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Loading.tsx                                         | TypeScript JSX     |         23 |          0 |          5 |         28 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/index.ts                                            | TypeScript         |          5 |          0 |          1 |          6 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/constants/indentStatus.ts                                             | TypeScript         |         42 |          4 |          5 |         51 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/constants/index.ts                                                    | TypeScript         |          3 |          0 |          1 |          4 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/constants/roles.ts                                                    | TypeScript         |         19 |          5 |          5 |         29 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/constants/theme.ts                                                    | TypeScript         |         89 |          6 |          8 |        103 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/context/AuthContext.tsx                                               | TypeScript JSX     |        116 |         10 |         20 |        146 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/context/index.ts                                                      | TypeScript         |          1 |          0 |          1 |          2 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/services/notifications.ts                                             | TypeScript         |         79 |         30 |         18 |        127 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/types/auth.types.ts                                                   | TypeScript         |         21 |          1 |          4 |         26 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/types/indent.types.ts                                                 | TypeScript         |        261 |         27 |         26 |        314 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/types/index.ts                                                        | TypeScript         |          3 |          0 |          1 |          4 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/src/utils/storage.ts                                                      | TypeScript         |         30 |          0 |         10 |         40 |
+| /Users/gajanan/Documents/Indense/scraps/mobile/tsconfig.json                                                             | JSON with Comments |         42 |          0 |          1 |         43 |
+| Total                                                                                                                    |                    |     -2,945 |       -277 |        274 |     -2,948 |
++--------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

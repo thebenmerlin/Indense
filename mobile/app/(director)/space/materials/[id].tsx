@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { materialsApi, Material, MaterialCategory, UnitOfMeasure } from '../../../../src/api/materials.api';
 
 const theme = {
     colors: {
@@ -25,23 +26,12 @@ const theme = {
     }
 };
 
-interface Material {
-    id: string;
-    name: string;
-    specification: string;
-    dimensions: string;
-    color: string;
-    category: string;
-    unit: string;
-}
-
-const CATEGORIES = ['Structural', 'Plumbing', 'Electrical', 'Finishing', 'Hardware', 'Other'];
-const UNITS = ['kg', 'bags', 'pieces', 'meter', 'sqft', 'sqm', 'liters', 'nos'];
-
 export default function MaterialDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const [material, setMaterial] = useState<Material | null>(null);
+    const [categories, setCategories] = useState<MaterialCategory[]>([]);
+    const [units, setUnits] = useState<UnitOfMeasure[]>([]);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -51,32 +41,34 @@ export default function MaterialDetail() {
     const [specification, setSpecification] = useState('');
     const [dimensions, setDimensions] = useState('');
     const [color, setColor] = useState('');
-    const [category, setCategory] = useState('');
-    const [unit, setUnit] = useState('');
+    const [code, setCode] = useState('');
+    const [selectedCategoryId, setSelectedCategoryId] = useState('');
+    const [selectedUnitId, setSelectedUnitId] = useState('');
 
     useEffect(() => {
-        fetchMaterial();
+        fetchData();
     }, [id]);
 
-    const fetchMaterial = async () => {
+    const fetchData = async () => {
         try {
-            // TODO: Replace with actual API call
-            const mockMaterial: Material = {
-                id: id!,
-                name: 'TMT Steel Bars',
-                specification: 'Fe 500D',
-                dimensions: '12mm x 12m',
-                color: 'Black',
-                category: 'Structural',
-                unit: 'kg',
-            };
-            setMaterial(mockMaterial);
-            setName(mockMaterial.name);
-            setSpecification(mockMaterial.specification);
-            setDimensions(mockMaterial.dimensions);
-            setColor(mockMaterial.color);
-            setCategory(mockMaterial.category);
-            setUnit(mockMaterial.unit);
+            const [materialData, categoriesData, unitsData] = await Promise.all([
+                materialsApi.getById(id!),
+                materialsApi.getCategories(),
+                materialsApi.getUnits(),
+            ]);
+
+            setMaterial(materialData);
+            setCategories(categoriesData);
+            setUnits(unitsData);
+
+            // Set edit form values
+            setName(materialData.name);
+            setSpecification(materialData.specification || '');
+            setDimensions(materialData.dimensions || '');
+            setColor(materialData.color || '');
+            setCode(materialData.code || '');
+            setSelectedCategoryId(materialData.itemGroupId);
+            setSelectedUnitId(materialData.uomId);
         } catch (error) {
             console.error('Failed to fetch material:', error);
             Alert.alert('Error', 'Failed to load material details');
@@ -92,11 +84,11 @@ export default function MaterialDetail() {
         }
         setSaving(true);
         try {
-            // TODO: API call to update
-            await new Promise(resolve => setTimeout(resolve, 500));
-            setMaterial({ id: id!, name, specification, dimensions, color, category, unit });
-            setEditMode(false);
-            Alert.alert('Success', 'Material updated successfully');
+            // NOTE: If backend has update endpoint, use it. For now we show success.
+            // The backend currently only has create, not update endpoint.
+            Alert.alert('Info', 'Material update API not yet implemented', [
+                { text: 'OK', onPress: () => setEditMode(false) }
+            ]);
         } catch (error) {
             Alert.alert('Error', 'Failed to update material');
         } finally {
@@ -107,13 +99,23 @@ export default function MaterialDetail() {
     const handleCancel = () => {
         if (material) {
             setName(material.name);
-            setSpecification(material.specification);
-            setDimensions(material.dimensions);
-            setColor(material.color);
-            setCategory(material.category);
-            setUnit(material.unit);
+            setSpecification(material.specification || '');
+            setDimensions(material.dimensions || '');
+            setColor(material.color || '');
+            setCode(material.code || '');
+            setSelectedCategoryId(material.itemGroupId);
+            setSelectedUnitId(material.uomId);
         }
         setEditMode(false);
+    };
+
+    const getCategoryName = (catId: string) => {
+        return categories.find(c => c.id === catId)?.name || 'Unknown';
+    };
+
+    const getUnitDisplay = (unitId: string) => {
+        const u = units.find(u => u.id === unitId);
+        return u ? `${u.name} (${u.abbreviation})` : 'Unknown';
     };
 
     if (loading) {
@@ -144,7 +146,7 @@ export default function MaterialDetail() {
                         <>
                             <Text style={styles.materialName}>{material.name}</Text>
                             <View style={styles.categoryBadge}>
-                                <Text style={styles.categoryText}>{material.category}</Text>
+                                <Text style={styles.categoryText}>{getCategoryName(material.itemGroupId)}</Text>
                             </View>
                         </>
                     ) : (
@@ -163,6 +165,16 @@ export default function MaterialDetail() {
                                 <TextInput style={styles.input} value={name} onChangeText={setName} />
                             ) : (
                                 <Text style={styles.fieldValue}>{material.name}</Text>
+                            )}
+                        </View>
+
+                        {/* Material Code */}
+                        <View style={styles.fieldRow}>
+                            <Text style={styles.fieldLabel}>Material Code</Text>
+                            {editMode ? (
+                                <TextInput style={styles.input} value={code} onChangeText={setCode} />
+                            ) : (
+                                <Text style={styles.fieldValue}>{material.code || '-'}</Text>
                             )}
                         </View>
 
@@ -201,12 +213,12 @@ export default function MaterialDetail() {
                             <Text style={styles.fieldLabel}>Category</Text>
                             {editMode ? (
                                 <View style={styles.pickerWrapper}>
-                                    <Picker selectedValue={category} onValueChange={setCategory} style={styles.picker}>
-                                        {CATEGORIES.map(cat => <Picker.Item key={cat} label={cat} value={cat} />)}
+                                    <Picker selectedValue={selectedCategoryId} onValueChange={setSelectedCategoryId} style={styles.picker}>
+                                        {categories.map(cat => <Picker.Item key={cat.id} label={cat.name} value={cat.id} />)}
                                     </Picker>
                                 </View>
                             ) : (
-                                <Text style={styles.fieldValue}>{material.category}</Text>
+                                <Text style={styles.fieldValue}>{getCategoryName(material.itemGroupId)}</Text>
                             )}
                         </View>
 
@@ -215,12 +227,12 @@ export default function MaterialDetail() {
                             <Text style={styles.fieldLabel}>Unit</Text>
                             {editMode ? (
                                 <View style={styles.pickerWrapper}>
-                                    <Picker selectedValue={unit} onValueChange={setUnit} style={styles.picker}>
-                                        {UNITS.map(u => <Picker.Item key={u} label={u} value={u} />)}
+                                    <Picker selectedValue={selectedUnitId} onValueChange={setSelectedUnitId} style={styles.picker}>
+                                        {units.map(u => <Picker.Item key={u.id} label={`${u.name} (${u.abbreviation})`} value={u.id} />)}
                                     </Picker>
                                 </View>
                             ) : (
-                                <Text style={styles.fieldValue}>{material.unit}</Text>
+                                <Text style={styles.fieldValue}>{getUnitDisplay(material.uomId)}</Text>
                             )}
                         </View>
                     </View>

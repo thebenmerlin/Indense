@@ -68,7 +68,7 @@ export default function IndentDetails() {
         }
     };
 
-    const isPurchased = indent?.order?.status === 'ORDER_PLACED' || indent?.status === 'ORDER_PLACED' || indent?.status === 'FULLY_RECEIVED';
+    const isPurchased = !!indent?.order?.orderNumber || indent?.status === 'ORDER_PLACED' || indent?.status === 'FULLY_RECEIVED';
     const canClose = isPurchased && indent?.status !== 'CLOSED';
 
     const handleArrivalChange = async (itemId: string, status: ArrivalStatus) => {

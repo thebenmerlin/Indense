@@ -15,8 +15,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { indentsApi } from '../../../src/api';
-import { Indent, IndentItem } from '../../../src/types';
+import { indentsApi, damagesApi } from '../../../src/api';
+import { Indent, IndentItem, DamageReport, DamageImage } from '../../../src/types';
 
 const theme = {
     colors: {
@@ -32,46 +32,55 @@ const theme = {
     }
 };
 
-interface DamageEntry {
+interface LocalDamageImage {
     id: string;
-    materialId: string;
-    materialName: string;
-    name: string;
-    description: string;
-    imageUri: string | null;
-    createdAt: Date;
+    uri: string;
+    isUploaded: boolean;
 }
 
 export default function DamageDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
+    const [damageReport, setDamageReport] = useState<DamageReport | null>(null);
     const [indent, setIndent] = useState<Indent | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [damages, setDamages] = useState<DamageEntry[]>([]);
-    const [isDraft, setIsDraft] = useState(true);
+    const [description, setDescription] = useState('');
+    const [severity, setSeverity] = useState<'MINOR' | 'MODERATE' | 'SEVERE'>('MODERATE');
+    const [damageImages, setDamageImages] = useState<LocalDamageImage[]>([]);
 
-    // Add damage modal state
-    const [showMaterialPicker, setShowMaterialPicker] = useState(false);
-    const [showDamageForm, setShowDamageForm] = useState(false);
-    const [selectedMaterial, setSelectedMaterial] = useState<IndentItem | null>(null);
-    const [damageName, setDamageName] = useState('');
-    const [damageDescription, setDamageDescription] = useState('');
-    const [damageImage, setDamageImage] = useState<string | null>(null);
+    // Add damage image modal state
+    const [showImagePicker, setShowImagePicker] = useState(false);
 
     useEffect(() => {
         if (id) {
-            fetchIndent();
+            fetchDamageReport();
         }
     }, [id]);
 
-    const fetchIndent = async () => {
+    const fetchDamageReport = async () => {
         try {
-            const data = await indentsApi.getById(id!);
-            setIndent(data);
-            // TODO: Load existing damages from API
+            const report = await damagesApi.getById(id!);
+            setDamageReport(report);
+            setDescription(report.description || '');
+            setSeverity(report.severity || 'MODERATE');
+            
+            // Convert existing images to local format
+            const existingImages: LocalDamageImage[] = (report.images || []).map((img: DamageImage) => ({
+                id: img.id,
+                uri: img.path,
+                isUploaded: true,
+            }));
+            setDamageImages(existingImages);
+            
+            // Fetch the associated indent
+            if (report.indentId) {
+                const indentData = await indentsApi.getById(report.indentId);
+                setIndent(indentData);
+            }
         } catch (error) {
-            console.error('Failed to fetch indent:', error);
+            console.error('Failed to fetch damage report:', error);
+            Alert.alert('Error', 'Failed to load damage report');
         } finally {
             setLoading(false);
         }
@@ -84,12 +93,6 @@ export default function DamageDetail() {
             month: 'short',
             year: 'numeric',
         });
-    };
-
-    const handleSelectMaterial = (material: IndentItem) => {
-        setSelectedMaterial(material);
-        setShowMaterialPicker(false);
-        setShowDamageForm(true);
     };
 
     const handlePickImage = async () => {
@@ -106,7 +109,7 @@ export default function DamageDetail() {
         });
 
         if (!result.canceled && result.assets[0]) {
-            setDamageImage(result.assets[0].uri);
+            await uploadDamageImage(result.assets[0].uri);
         }
     };
 
@@ -123,82 +126,138 @@ export default function DamageDetail() {
         });
 
         if (!result.canceled && result.assets[0]) {
-            setDamageImage(result.assets[0].uri);
+            await uploadDamageImage(result.assets[0].uri);
         }
     };
 
-    const handleSaveDamage = () => {
-        if (!damageName.trim()) {
-            Alert.alert('Required', 'Please enter a damage name');
-            return;
+    const uploadDamageImage = async (uri: string) => {
+        try {
+            const fileName = `damage_${Date.now()}.jpg`;
+            await damagesApi.uploadImage(id!, uri, fileName);
+            
+            // Add to local state
+            const newImage: LocalDamageImage = {
+                id: `local-${Date.now()}`,
+                uri,
+                isUploaded: true,
+            };
+            setDamageImages([...damageImages, newImage]);
+            
+            // Refresh to get actual image from server
+            await fetchDamageReport();
+        } catch (error) {
+            console.error('Failed to upload image:', error);
+            Alert.alert('Error', 'Failed to upload image');
         }
-        if (!damageDescription.trim()) {
-            Alert.alert('Required', 'Please enter a description');
-            return;
-        }
-
-        const newDamage: DamageEntry = {
-            id: `temp-${Date.now()}`,
-            materialId: selectedMaterial!.id,
-            materialName: selectedMaterial!.material?.name || 'Unknown Material',
-            name: damageName.trim(),
-            description: damageDescription.trim(),
-            imageUri: damageImage,
-            createdAt: new Date(),
-        };
-
-        setDamages([...damages, newDamage]);
-        resetDamageForm();
-        setShowDamageForm(false);
     };
 
-    const resetDamageForm = () => {
-        setSelectedMaterial(null);
-        setDamageName('');
-        setDamageDescription('');
-        setDamageImage(null);
+    const handleDeleteImage = async (imageId: string) => {
+        Alert.alert(
+            'Delete Image',
+            'Are you sure you want to delete this image?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await damagesApi.deleteImage(id!, imageId);
+                            setDamageImages(damageImages.filter(img => img.id !== imageId));
+                        } catch (error) {
+                            console.error('Failed to delete image:', error);
+                            Alert.alert('Error', 'Failed to delete image');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
-    const handleReportDamages = async () => {
-        if (damages.length === 0) {
-            Alert.alert('No Damages', 'Please add at least one damage report');
-            return;
-        }
-
+    const handleUpdateDamageReport = async () => {
         setSaving(true);
         try {
-            // TODO: API call to submit damages
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            setIsDraft(false);
-            Alert.alert(
-                'Damages Reported',
-                'Your damage report has been submitted successfully',
-                [{ text: 'OK', onPress: () => router.back() }]
-            );
+            await damagesApi.update(id!, {
+                description: description.trim(),
+                severity,
+            });
+            Alert.alert('Saved', 'Damage report updated');
         } catch (error) {
-            Alert.alert('Error', 'Failed to report damages');
+            console.error('Failed to update:', error);
+            Alert.alert('Error', 'Failed to update damage report');
         } finally {
             setSaving(false);
         }
     };
 
-    const handleSaveDraft = async () => {
-        if (damages.length === 0) {
-            Alert.alert('No Damages', 'Please add at least one damage to save as draft');
+    const handleSubmitDamageReport = async () => {
+        if (!description.trim()) {
+            Alert.alert('Required', 'Please enter a description of the damage');
+            return;
+        }
+        if (damageImages.length === 0) {
+            Alert.alert('Required', 'Please add at least one image of the damage');
             return;
         }
 
-        setSaving(true);
-        try {
-            // TODO: API call to save as draft
-            await new Promise(resolve => setTimeout(resolve, 500));
-            Alert.alert('Saved', 'Draft saved successfully', [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to save draft');
-        } finally {
-            setSaving(false);
+        Alert.alert(
+            'Submit Damage Report',
+            'Once submitted, you cannot edit this report. Are you sure?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Submit',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setSaving(true);
+                        try {
+                            await damagesApi.submit(id!);
+                            Alert.alert(
+                                'Submitted',
+                                'Damage report has been submitted successfully',
+                                [{ text: 'OK', onPress: () => router.back() }]
+                            );
+                        } catch (error) {
+                            console.error('Failed to submit:', error);
+                            Alert.alert('Error', 'Failed to submit damage report');
+                        } finally {
+                            setSaving(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleDeleteDamageReport = async () => {
+        Alert.alert(
+            'Delete Report',
+            'Are you sure you want to delete this damage report?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await damagesApi.delete(id!);
+                            router.back();
+                        } catch (error) {
+                            console.error('Failed to delete:', error);
+                            Alert.alert('Error', 'Failed to delete damage report');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const getSeverityColor = (sev: string) => {
+        switch (sev) {
+            case 'MINOR': return theme.colors.success;
+            case 'MODERATE': return theme.colors.warning;
+            case 'SEVERE': return theme.colors.error;
+            default: return theme.colors.textSecondary;
         }
     };
 
@@ -210,221 +269,163 @@ export default function DamageDetail() {
         );
     }
 
-    if (!indent) {
+    if (!damageReport) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={styles.errorText}>Indent not found</Text>
+                <Text style={styles.errorText}>Damage report not found</Text>
             </View>
         );
     }
+
+    const isSubmitted = damageReport.status !== 'DRAFT';
 
     return (
         <View style={styles.container}>
             <ScrollView style={styles.scrollView}>
                 {/* Indent Info */}
-                <View style={styles.header}>
-                    <Text style={styles.indentName}>{indent.name || indent.indentNumber}</Text>
-                    <Text style={styles.indentNumber}>{indent.indentNumber}</Text>
-                    <View style={styles.infoRow}>
-                        <Ionicons name="location-outline" size={16} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>{indent.site?.name}</Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                        <Ionicons name="calendar-outline" size={16} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>{formatDate(indent.createdAt)}</Text>
-                    </View>
-                </View>
-
-                {/* View Damages */}
-                {damages.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>View Damages</Text>
-                        {damages.map(damage => (
-                            <View key={damage.id} style={styles.damageCard}>
-                                {damage.imageUri && (
-                                    <Image
-                                        source={{ uri: damage.imageUri }}
-                                        style={styles.damageImage}
-                                    />
-                                )}
-                                <View style={styles.damageInfo}>
-                                    <Text style={styles.damageName}>{damage.name}</Text>
-                                    <Text style={styles.damageMaterial}>{damage.materialName}</Text>
-                                    <Text style={styles.damageDesc} numberOfLines={2}>
-                                        {damage.description}
-                                    </Text>
-                                </View>
+                {indent && (
+                    <View style={styles.header}>
+                        <Text style={styles.indentName}>{indent.name || indent.indentNumber}</Text>
+                        <Text style={styles.indentNumber}>{indent.indentNumber}</Text>
+                        <View style={styles.infoRow}>
+                            <Ionicons name="location-outline" size={16} color={theme.colors.textSecondary} />
+                            <Text style={styles.infoText}>{indent.site?.name}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Ionicons name="calendar-outline" size={16} color={theme.colors.textSecondary} />
+                            <Text style={styles.infoText}>{formatDate(damageReport.createdAt)}</Text>
+                        </View>
+                        <View style={styles.statusRow}>
+                            <View style={[
+                                styles.statusBadge,
+                                { backgroundColor: isSubmitted ? theme.colors.error + '20' : theme.colors.warning + '20' }
+                            ]}>
+                                <Text style={[
+                                    styles.statusText,
+                                    { color: isSubmitted ? theme.colors.error : theme.colors.warning }
+                                ]}>
+                                    {isSubmitted ? 'Submitted' : 'Draft'}
+                                </Text>
                             </View>
-                        ))}
+                        </View>
                     </View>
                 )}
 
-                {/* Add Damages Button */}
+                {/* Severity Selector */}
                 <View style={styles.section}>
-                    <TouchableOpacity
-                        style={styles.addDamagesButton}
-                        onPress={() => setShowMaterialPicker(true)}
-                    >
-                        <Ionicons name="add-circle" size={24} color={theme.colors.error} />
-                        <Text style={styles.addDamagesText}>Add Damage(s)</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.sectionTitle}>Severity Level</Text>
+                    <View style={styles.severityOptions}>
+                        {(['MINOR', 'MODERATE', 'SEVERE'] as const).map(level => (
+                            <TouchableOpacity
+                                key={level}
+                                style={[
+                                    styles.severityOption,
+                                    severity === level && { borderColor: getSeverityColor(level), backgroundColor: getSeverityColor(level) + '15' },
+                                ]}
+                                onPress={() => !isSubmitted && setSeverity(level)}
+                                disabled={isSubmitted}
+                            >
+                                <Text style={[
+                                    styles.severityOptionText,
+                                    severity === level && { color: getSeverityColor(level), fontWeight: '700' }
+                                ]}>
+                                    {level}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </View>
+
+                {/* Description */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Description *</Text>
+                    <TextInput
+                        style={[styles.textArea, isSubmitted && styles.inputDisabled]}
+                        placeholder="Describe the damage in detail..."
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={description}
+                        onChangeText={setDescription}
+                        multiline
+                        numberOfLines={4}
+                        editable={!isSubmitted}
+                    />
+                </View>
+
+                {/* Damage Images */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Damage Photos</Text>
+                    
+                    {damageImages.length > 0 && (
+                        <View style={styles.imageGrid}>
+                            {damageImages.map(image => (
+                                <View key={image.id} style={styles.imageContainer}>
+                                    <Image source={{ uri: image.uri }} style={styles.damageImage} />
+                                    {!isSubmitted && (
+                                        <TouchableOpacity
+                                            style={styles.deleteImageButton}
+                                            onPress={() => handleDeleteImage(image.id)}
+                                        >
+                                            <Ionicons name="close-circle" size={24} color={theme.colors.error} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {!isSubmitted && (
+                        <View style={styles.uploadOptions}>
+                            <TouchableOpacity style={styles.uploadOption} onPress={handleTakePhoto}>
+                                <Ionicons name="camera" size={24} color={theme.colors.primary} />
+                                <Text style={styles.uploadOptionText}>Camera</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.uploadOption} onPress={handlePickImage}>
+                                <Ionicons name="images" size={24} color={theme.colors.primary} />
+                                <Text style={styles.uploadOptionText}>Gallery</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+
+                {/* Delete Button for Draft */}
+                {!isSubmitted && (
+                    <View style={styles.section}>
+                        <TouchableOpacity
+                            style={styles.deleteButton}
+                            onPress={handleDeleteDamageReport}
+                        >
+                            <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
+                            <Text style={styles.deleteButtonText}>Delete Draft</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 <View style={{ height: 120 }} />
             </ScrollView>
 
             {/* Bottom Buttons */}
-            {damages.length > 0 && (
+            {!isSubmitted && (
                 <View style={styles.bottomButtons}>
                     <TouchableOpacity
                         style={styles.draftButton}
-                        onPress={handleSaveDraft}
+                        onPress={handleUpdateDamageReport}
                         disabled={saving}
                     >
                         <Text style={styles.draftButtonText}>Save Draft</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[styles.reportButton, !isDraft && styles.reportedButton]}
-                        onPress={handleReportDamages}
-                        disabled={saving || !isDraft}
+                        style={styles.reportButton}
+                        onPress={handleSubmitDamageReport}
+                        disabled={saving}
                     >
                         {saving ? (
                             <ActivityIndicator color="#FFFFFF" size="small" />
                         ) : (
-                            <Text style={styles.reportButtonText}>
-                                {isDraft ? 'Report Damages' : 'Damages Reported'}
-                            </Text>
+                            <Text style={styles.reportButtonText}>Submit Report</Text>
                         )}
                     </TouchableOpacity>
                 </View>
             )}
-
-            {/* Material Picker Modal */}
-            <Modal
-                visible={showMaterialPicker}
-                animationType="slide"
-                presentationStyle="pageSheet"
-                onRequestClose={() => setShowMaterialPicker(false)}
-            >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Select Material</Text>
-                        <TouchableOpacity onPress={() => setShowMaterialPicker(false)}>
-                            <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-                        </TouchableOpacity>
-                    </View>
-                    <FlatList
-                        data={indent.items}
-                        keyExtractor={item => item.id}
-                        contentContainerStyle={{ padding: 16 }}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity
-                                style={styles.materialOption}
-                                onPress={() => handleSelectMaterial(item)}
-                            >
-                                <View>
-                                    <Text style={styles.materialOptionName}>
-                                        {item.material?.name}
-                                    </Text>
-                                    <Text style={styles.materialOptionCode}>
-                                        {item.material?.code}
-                                    </Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        )}
-                    />
-                </View>
-            </Modal>
-
-            {/* Damage Form Modal */}
-            <Modal
-                visible={showDamageForm}
-                animationType="slide"
-                presentationStyle="pageSheet"
-                onRequestClose={() => {
-                    resetDamageForm();
-                    setShowDamageForm(false);
-                }}
-            >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Report Damage</Text>
-                        <TouchableOpacity onPress={() => {
-                            resetDamageForm();
-                            setShowDamageForm(false);
-                        }}>
-                            <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-                        </TouchableOpacity>
-                    </View>
-                    <ScrollView style={styles.formContent}>
-                        {selectedMaterial && (
-                            <View style={styles.selectedMaterial}>
-                                <Text style={styles.selectedMaterialLabel}>Material:</Text>
-                                <Text style={styles.selectedMaterialName}>
-                                    {selectedMaterial.material?.name}
-                                </Text>
-                            </View>
-                        )}
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.formLabel}>Damage Name *</Text>
-                            <TextInput
-                                style={styles.formInput}
-                                placeholder="e.g., Cracked Tiles Batch #5"
-                                placeholderTextColor={theme.colors.textSecondary}
-                                value={damageName}
-                                onChangeText={setDamageName}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.formLabel}>Description *</Text>
-                            <TextInput
-                                style={[styles.formInput, styles.textArea]}
-                                placeholder="Describe the damage..."
-                                placeholderTextColor={theme.colors.textSecondary}
-                                value={damageDescription}
-                                onChangeText={setDamageDescription}
-                                multiline
-                                numberOfLines={4}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.formLabel}>Upload Picture</Text>
-                            {damageImage ? (
-                                <View style={styles.imagePreview}>
-                                    <Image source={{ uri: damageImage }} style={styles.previewImage} />
-                                    <TouchableOpacity
-                                        style={styles.removeImage}
-                                        onPress={() => setDamageImage(null)}
-                                    >
-                                        <Ionicons name="close-circle" size={28} color={theme.colors.error} />
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                <View style={styles.uploadOptions}>
-                                    <TouchableOpacity style={styles.uploadOption} onPress={handleTakePhoto}>
-                                        <Ionicons name="camera" size={24} color={theme.colors.primary} />
-                                        <Text style={styles.uploadOptionText}>Camera</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.uploadOption} onPress={handlePickImage}>
-                                        <Ionicons name="images" size={24} color={theme.colors.primary} />
-                                        <Text style={styles.uploadOptionText}>Photos</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                        </View>
-
-                        <TouchableOpacity style={styles.saveDamageButton} onPress={handleSaveDamage}>
-                            <Text style={styles.saveDamageButtonText}>Save Damage</Text>
-                        </TouchableOpacity>
-
-                        <View style={{ height: 40 }} />
-                    </ScrollView>
-                </View>
-            </Modal>
         </View>
     );
 }
@@ -473,6 +474,19 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.textSecondary,
     },
+    statusRow: {
+        marginTop: 12,
+    },
+    statusBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    statusText: {
+        fontSize: 13,
+        fontWeight: '600',
+    },
     section: {
         padding: 16,
     },
@@ -482,52 +496,93 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
         marginBottom: 12,
     },
-    damageCard: {
+    severityOptions: {
         flexDirection: 'row',
-        backgroundColor: theme.colors.cardBg,
+        flexWrap: 'wrap',
+        gap: 10,
+    },
+    severityOption: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
         borderRadius: 10,
-        overflow: 'hidden',
-        marginBottom: 10,
         borderWidth: 1,
         borderColor: theme.colors.border,
+        backgroundColor: theme.colors.cardBg,
+    },
+    severityOptionText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: theme.colors.textSecondary,
+    },
+    textArea: {
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 16,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        color: theme.colors.textPrimary,
+        minHeight: 100,
+        textAlignVertical: 'top',
+    },
+    inputDisabled: {
+        backgroundColor: theme.colors.surface,
+        color: theme.colors.textSecondary,
+    },
+    imageGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 16,
+    },
+    imageContainer: {
+        position: 'relative',
+        width: '31%',
+        aspectRatio: 1,
     },
     damageImage: {
-        width: 80,
-        height: 80,
+        width: '100%',
+        height: '100%',
+        borderRadius: 10,
     },
-    damageInfo: {
+    deleteImageButton: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+    },
+    uploadOptions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    uploadOption: {
         flex: 1,
-        padding: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderStyle: 'dashed',
     },
-    damageName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.textPrimary,
+    uploadOptionText: {
+        marginTop: 8,
+        fontSize: 14,
+        fontWeight: '500',
+        color: theme.colors.primary,
     },
-    damageMaterial: {
-        fontSize: 13,
-        color: theme.colors.error,
-        marginTop: 2,
-    },
-    damageDesc: {
-        fontSize: 13,
-        color: theme.colors.textSecondary,
-        marginTop: 4,
-    },
-    addDamagesButton: {
+    deleteButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
-        paddingVertical: 16,
-        borderWidth: 2,
-        borderColor: theme.colors.error,
-        borderStyle: 'dashed',
+        paddingVertical: 12,
         gap: 8,
     },
-    addDamagesText: {
-        fontSize: 16,
+    deleteButtonText: {
+        fontSize: 15,
         fontWeight: '600',
         color: theme.colors.error,
     },
@@ -563,145 +618,9 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.error,
         alignItems: 'center',
     },
-    reportedButton: {
-        backgroundColor: theme.colors.success,
-    },
     reportButtonText: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#FFFFFF',
-    },
-    modalContainer: {
-        flex: 1,
-        backgroundColor: theme.colors.surface,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        paddingTop: 20,
-        backgroundColor: theme.colors.cardBg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: theme.colors.textPrimary,
-    },
-    materialOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: theme.colors.cardBg,
-        padding: 16,
-        marginBottom: 8,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    materialOptionName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.textPrimary,
-    },
-    materialOptionCode: {
-        fontSize: 13,
-        color: theme.colors.textSecondary,
-        marginTop: 2,
-    },
-    formContent: {
-        flex: 1,
-        padding: 16,
-    },
-    selectedMaterial: {
-        backgroundColor: theme.colors.cardBg,
-        padding: 12,
-        borderRadius: 10,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    selectedMaterialLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    selectedMaterialName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.textPrimary,
-        marginTop: 4,
-    },
-    formGroup: {
-        marginBottom: 16,
-    },
-    formLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.textPrimary,
-        marginBottom: 8,
-    },
-    formInput: {
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        color: theme.colors.textPrimary,
-    },
-    textArea: {
-        minHeight: 100,
-        textAlignVertical: 'top',
-    },
-    uploadOptions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    uploadOption: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderStyle: 'dashed',
-    },
-    uploadOptionText: {
-        marginTop: 8,
-        fontSize: 14,
-        fontWeight: '500',
-        color: theme.colors.primary,
-    },
-    imagePreview: {
-        position: 'relative',
-    },
-    previewImage: {
-        width: '100%',
-        height: 200,
-        borderRadius: 10,
-    },
-    removeImage: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 14,
-    },
-    saveDamageButton: {
-        backgroundColor: theme.colors.error,
-        borderRadius: 12,
-        paddingVertical: 16,
-        alignItems: 'center',
-        marginTop: 8,
-    },
-    saveDamageButtonText: {
-        fontSize: 17,
-        fontWeight: '700',
         color: '#FFFFFF',
     },
 });

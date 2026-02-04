@@ -1,4 +1,4 @@
-import { IndentStatus, Role } from '@prisma/client';
+import { IndentStatus, Role, NotificationType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../../utils/errors';
 import { CreateIndentDto, IndentFilters, PaginatedResult } from '../../types';
@@ -11,6 +11,7 @@ import {
     canDirectorApprove,
     canClose,
 } from './indents.stateMachine';
+import notificationsService from '../notifications/notifications.service';
 
 class IndentsService {
     /**
@@ -194,6 +195,36 @@ class IndentsService {
             { indentNumber }
         );
 
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_SUBMITTED,
+            Role.PURCHASE_TEAM,
+            indent.id,
+            `New indent ${indent.indentNumber} submitted and awaiting review.`
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_SUBMITTED,
+            Role.DIRECTOR,
+            indent.id,
+            `Indent ${indent.indentNumber} submitted and awaiting approval.`
+        );
+
+        if (indent.priority === 'URGENT') {
+            await notificationsService.notifyRole(
+                NotificationType.INDENT_URGENT,
+                Role.PURCHASE_TEAM,
+                indent.id,
+                `Urgent indent ${indent.indentNumber} requires immediate attention.`
+            );
+
+            await notificationsService.notifyRole(
+                NotificationType.INDENT_URGENT,
+                Role.DIRECTOR,
+                indent.id,
+                `Urgent indent ${indent.indentNumber} requires approval.`
+            );
+        }
+
         return indent;
     }
 
@@ -234,6 +265,19 @@ class IndentsService {
             { remarks }
         );
 
+        await notificationsService.notifySiteEngineer(
+            NotificationType.INDENT_PURCHASE_APPROVED,
+            id,
+            `Indent ${indent.indentNumber} approved by Purchase Team and awaiting Director approval.`
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_PURCHASE_APPROVED,
+            Role.DIRECTOR,
+            id,
+            `Indent ${indent.indentNumber} is ready for your approval.`
+        );
+
         return updated;
     }
 
@@ -272,6 +316,19 @@ class IndentsService {
             indent.status,
             IndentStatus.DIRECTOR_APPROVED,
             { remarks }
+        );
+
+        await notificationsService.notifySiteEngineer(
+            NotificationType.INDENT_DIRECTOR_APPROVED,
+            id,
+            `Indent ${indent.indentNumber} fully approved. Order can now be placed.`
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_DIRECTOR_APPROVED,
+            Role.PURCHASE_TEAM,
+            id,
+            `Indent ${indent.indentNumber} approved by Director. Proceed to ordering.`
         );
 
         return updated;
@@ -318,6 +375,12 @@ class IndentsService {
             indent.status,
             IndentStatus.REJECTED,
             { reason }
+        );
+
+        await notificationsService.notifySiteEngineer(
+            NotificationType.INDENT_REJECTED,
+            id,
+            `Indent ${indent.indentNumber} rejected. Reason: ${reason}`
         );
 
         return updated;
@@ -367,6 +430,288 @@ class IndentsService {
             AuditAction.INDENT_CLOSED,
             indent.status,
             IndentStatus.CLOSED
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_CLOSED,
+            Role.PURCHASE_TEAM,
+            id,
+            `Indent ${indent.indentNumber} has been closed.`
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_CLOSED,
+            Role.DIRECTOR,
+            id,
+            `Indent ${indent.indentNumber} has been closed.`
+        );
+
+        return updated;
+    }
+
+    /**
+     * Put indent on hold (Director only)
+     * Can be used to temporarily pause processing of an indent
+     */
+    async putOnHold(
+        id: string,
+        userId: string,
+        reason: string
+    ): Promise<unknown> {
+        const indent = await prisma.indent.findUnique({ where: { id } });
+        if (!indent) throw new NotFoundError('Indent not found');
+
+        // Can only put on hold if not already on hold, closed, or rejected
+        const nonHoldableStatuses: IndentStatus[] = [IndentStatus.CLOSED, IndentStatus.REJECTED];
+        if (nonHoldableStatuses.includes(indent.status)) {
+            throw new BadRequestError(`Cannot put indent on hold in ${indent.status} status`);
+        }
+
+        if (indent.isOnHold) {
+            throw new BadRequestError('Indent is already on hold');
+        }
+
+        const updated = await prisma.indent.update({
+            where: { id },
+            data: {
+                isOnHold: true,
+                onHoldAt: new Date(),
+                onHoldById: userId,
+                onHoldReason: reason,
+            },
+            include: { items: true, site: true, createdBy: { select: { name: true } } },
+        });
+
+        await notificationsService.notifySiteEngineer(
+            NotificationType.INDENT_ON_HOLD,
+            id,
+            `Your indent "${indent.name}" is on hold. Reason: ${reason}`
+        );
+
+        return updated;
+    }
+
+    /**
+     * Release indent from hold (Director only)
+     */
+    async releaseFromHold(id: string, userId: string): Promise<unknown> {
+        const indent = await prisma.indent.findUnique({ where: { id } });
+        if (!indent) throw new NotFoundError('Indent not found');
+
+        if (!indent.isOnHold) {
+            throw new BadRequestError('Indent is not on hold');
+        }
+
+        const updated = await prisma.indent.update({
+            where: { id },
+            data: {
+                isOnHold: false,
+                releasedFromHoldAt: new Date(),
+            },
+            include: { items: true, site: true, createdBy: { select: { name: true } } },
+        });
+
+        await notificationsService.notifySiteEngineer(
+            NotificationType.INDENT_ON_HOLD,
+            id,
+            `Your indent "${indent.name}" has been released from hold.`
+        );
+
+        return updated;
+    }
+
+    /**
+     * Update arrival status for an indent item (Site Engineer only)
+     * GREEN = ARRIVED, YELLOW = PARTIAL, RED = NOT_ARRIVED
+     */
+    async updateArrivalStatus(
+        indentId: string,
+        itemId: string,
+        userId: string,
+        siteId: string,
+        arrivalStatus: string,
+        arrivalNotes?: string
+    ): Promise<unknown> {
+        // Find the indent and verify access
+        const indent = await prisma.indent.findUnique({
+            where: { id: indentId },
+            include: { items: true },
+        });
+
+        if (!indent) throw new NotFoundError('Indent not found');
+
+        // Site Engineers can only update their site's indents
+        if (indent.siteId !== siteId) {
+            throw new ForbiddenError('Access denied to this indent');
+        }
+
+        // Can only update arrival status after order is placed (purchased)
+        const purchasedStatuses: IndentStatus[] = [
+            IndentStatus.ORDER_PLACED,
+            IndentStatus.PARTIALLY_RECEIVED,
+            IndentStatus.FULLY_RECEIVED,
+        ];
+        if (!purchasedStatuses.includes(indent.status)) {
+            throw new BadRequestError('Can only update arrival status after order is placed');
+        }
+
+        // Find the item
+        const item = indent.items.find((i) => i.id === itemId);
+        if (!item) {
+            throw new NotFoundError('Indent item not found');
+        }
+
+        // Update the item
+        const updated = await prisma.indentItem.update({
+            where: { id: itemId },
+            data: {
+                arrivalStatus,
+                arrivalNotes: arrivalStatus === 'PARTIAL' ? arrivalNotes : null,
+            },
+            include: {
+                material: true,
+            },
+        });
+
+        // If NOT_ARRIVED, notify Purchase Team and Director via push
+        if (arrivalStatus === 'NOT_ARRIVED') {
+            const message = `Material "${updated.material.name}" marked as not arrived for indent ${indent.indentNumber}`;
+            await notificationsService.notifyRole(
+                NotificationType.MATERIAL_RECEIVED,
+                Role.PURCHASE_TEAM,
+                indentId,
+                message
+            );
+
+            await notificationsService.notifyRole(
+                NotificationType.MATERIAL_RECEIVED,
+                Role.DIRECTOR,
+                indentId,
+                message
+            );
+        }
+
+        return updated;
+    }
+
+    /**
+     * Get pending indents count for Purchase Team dashboard badge
+     * Pending = SUBMITTED status (awaiting PT approval)
+     */
+    async getPendingCount(siteId?: string): Promise<number> {
+        const where: Record<string, unknown> = {
+            status: IndentStatus.SUBMITTED,
+        };
+
+        if (siteId) {
+            where.siteId = siteId;
+        }
+
+        return prisma.indent.count({ where });
+    }
+
+    /**
+     * Get indent statistics for PT/Director dashboard
+     */
+    async getStats(siteId?: string): Promise<{
+        totalIndents: number;
+        pendingIndents: number;
+        approvedIndents: number;
+        purchasedIndents: number;
+        closedIndents: number;
+    }> {
+        const baseWhere: Record<string, unknown> = {};
+        if (siteId) {
+            baseWhere.siteId = siteId;
+        }
+
+        const [total, pending, ptApproved, directorApproved, purchased, closed] = await Promise.all([
+            prisma.indent.count({ where: baseWhere }),
+            prisma.indent.count({ where: { ...baseWhere, status: IndentStatus.SUBMITTED } }),
+            prisma.indent.count({ where: { ...baseWhere, status: IndentStatus.PURCHASE_APPROVED } }),
+            prisma.indent.count({ where: { ...baseWhere, status: IndentStatus.DIRECTOR_APPROVED } }),
+            prisma.indent.count({
+                where: {
+                    ...baseWhere,
+                    status: { in: [IndentStatus.ORDER_PLACED, IndentStatus.PARTIALLY_RECEIVED, IndentStatus.FULLY_RECEIVED] },
+                },
+            }),
+            prisma.indent.count({ where: { ...baseWhere, status: IndentStatus.CLOSED } }),
+        ]);
+
+        return {
+            totalIndents: total,
+            pendingIndents: pending,
+            approvedIndents: ptApproved + directorApproved,
+            purchasedIndents: purchased,
+            closedIndents: closed,
+        };
+    }
+
+    /**
+     * Close indent by Site Engineer (different from admin close)
+     * Can only close if all items are arrived and no unresolved damages
+     */
+    async closeByEngineer(id: string, userId: string, siteId: string): Promise<unknown> {
+        const indent = await prisma.indent.findUnique({
+            where: { id },
+            include: {
+                items: {
+                    include: { damageReports: { where: { isResolved: false } } },
+                },
+                order: true,
+            },
+        });
+
+        if (!indent) throw new NotFoundError('Indent not found');
+
+        // Site Engineers can only close their site's indents
+        if (indent.siteId !== siteId) {
+            throw new ForbiddenError('Access denied to this indent');
+        }
+
+        // Must have an order (purchased)
+        if (!indent.order) {
+            throw new BadRequestError('Indent must be purchased before closing');
+        }
+
+        // Check for unresolved damage reports
+        const hasUnresolvedDamage = indent.items.some(
+            (item) => item.damageReports.length > 0
+        );
+
+        if (hasUnresolvedDamage) {
+            throw new BadRequestError('Cannot close indent with unresolved damage reports');
+        }
+
+        const updated = await prisma.indent.update({
+            where: { id },
+            data: {
+                status: IndentStatus.CLOSED,
+                closedAt: new Date(),
+            },
+        });
+
+        await logIndentStateChange(
+            userId,
+            id,
+            AuditAction.INDENT_CLOSED,
+            indent.status,
+            IndentStatus.CLOSED
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_CLOSED,
+            Role.PURCHASE_TEAM,
+            id,
+            `Indent ${indent.indentNumber} has been closed.`
+        );
+
+        await notificationsService.notifyRole(
+            NotificationType.INDENT_CLOSED,
+            Role.DIRECTOR,
+            id,
+            `Indent ${indent.indentNumber} has been closed.`
         );
 
         return updated;

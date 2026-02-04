@@ -14,8 +14,9 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { indentsApi } from '../../../src/api';
-import { Indent, IndentItem } from '../../../src/types';
+import * as DocumentPicker from 'expo-document-picker';
+import { ordersApi } from '../../../src/api';
+import { Order, OrderItem, OrderInvoice, OrderItemInvoice } from '../../../src/types';
 
 const theme = {
     colors: {
@@ -33,10 +34,10 @@ const theme = {
 interface VendorDetails {
     vendorName: string;
     vendorAddress: string;
-    gstNo: string;
-    contactPerson: string;
-    contactPhone: string;
-    natureOfBusiness: string;
+    vendorGstNo: string;
+    vendorContact: string;
+    vendorContactPerson: string;
+    vendorNatureOfBusiness: string;
 }
 
 interface MaterialCost {
@@ -45,55 +46,52 @@ interface MaterialCost {
     total: number;
 }
 
-interface Invoice {
-    id: string;
-    name: string;
-    imageUri: string;
-}
-
 export default function ProcessOrder() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const [indent, setIndent] = useState<Indent | null>(null);
+    const [order, setOrder] = useState<Order | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [isPurchased, setIsPurchased] = useState(false);
 
     // Vendor Details State
     const [vendor, setVendor] = useState<VendorDetails>({
         vendorName: '',
         vendorAddress: '',
-        gstNo: '',
-        contactPerson: '',
-        contactPhone: '',
-        natureOfBusiness: '',
+        vendorGstNo: '',
+        vendorContact: '',
+        vendorContactPerson: '',
+        vendorNatureOfBusiness: '',
     });
 
     // Material Modal State
     const [showMaterialModal, setShowMaterialModal] = useState(false);
-    const [selectedMaterial, setSelectedMaterial] = useState<IndentItem | null>(null);
+    const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
     const [materialCost, setMaterialCost] = useState<MaterialCost>({ rate: '', quantity: '', total: 0 });
-    const [materialInvoices, setMaterialInvoices] = useState<Invoice[]>([]);
+    const [savingItem, setSavingItem] = useState(false);
+
+    // Invoice Upload State
+    const [uploadingInvoice, setUploadingInvoice] = useState(false);
 
     useEffect(() => {
-        if (id) fetchIndent();
+        if (id) fetchOrder();
     }, [id]);
 
-    const fetchIndent = async () => {
+    const fetchOrder = async () => {
         try {
-            const data = await indentsApi.getById(id!);
-            setIndent(data);
-            setIsPurchased(data.status === 'ORDER_PLACED');
-            if (data.order) {
-                setVendor(prev => ({
-                    ...prev,
-                    vendorName: data.order?.vendorName || '',
-                    contactPhone: data.order?.vendorContact || '',
-                }));
-            }
+            const data = await ordersApi.getById(id!);
+            setOrder(data);
+            // Populate vendor details from existing order
+            setVendor({
+                vendorName: data.vendorName || '',
+                vendorAddress: data.vendorAddress || '',
+                vendorGstNo: data.vendorGstNo || '',
+                vendorContact: data.vendorContact || '',
+                vendorContactPerson: data.vendorContactPerson || '',
+                vendorNatureOfBusiness: data.vendorNatureOfBusiness || '',
+            });
         } catch (error) {
-            console.error('Failed to fetch indent:', error);
-            Alert.alert('Error', 'Failed to load indent');
+            console.error('Failed to fetch order:', error);
+            Alert.alert('Error', 'Failed to load order');
         } finally {
             setLoading(false);
         }
@@ -108,10 +106,17 @@ export default function ProcessOrder() {
         });
     };
 
-    const openMaterialModal = (item: IndentItem) => {
-        setSelectedMaterial(item);
-        setMaterialCost({ rate: '', quantity: String(item.requestedQty), total: 0 });
-        setMaterialInvoices([]);
+    const formatCurrency = (amount: number | null | undefined) => {
+        return `₹${(amount || 0).toLocaleString('en-IN')}`;
+    };
+
+    const openMaterialModal = (item: OrderItem) => {
+        setSelectedItem(item);
+        setMaterialCost({ 
+            rate: item.unitPrice?.toString() || '', 
+            quantity: item.quantity?.toString() || '', 
+            total: item.totalPrice || 0 
+        });
         setShowMaterialModal(true);
     };
 
@@ -121,56 +126,109 @@ export default function ProcessOrder() {
         setMaterialCost(prev => ({ ...prev, total: rate * qty }));
     };
 
-    const handlePickInvoice = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission Required', 'Please grant photo library access');
-            return;
-        }
+    const handleSaveItemCost = async () => {
+        if (!selectedItem) return;
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
+        setSavingItem(true);
+        try {
+            await ordersApi.updateOrderItem(id!, selectedItem.id, {
+                unitPrice: parseFloat(materialCost.rate) || 0,
+                quantity: parseFloat(materialCost.quantity) || selectedItem.quantity,
+            });
+            await fetchOrder(); // Refresh order data
+            setShowMaterialModal(false);
+            Alert.alert('Saved', 'Material cost updated');
+        } catch (error) {
+            console.error('Failed to update item:', error);
+            Alert.alert('Error', 'Failed to update material cost');
+        } finally {
+            setSavingItem(false);
+        }
+    };
+
+    const handleUploadOrderInvoice = async () => {
+        const result = await DocumentPicker.getDocumentAsync({
+            type: ['image/*', 'application/pdf'],
         });
 
-        if (!result.canceled && result.assets[0]) {
-            setMaterialInvoices([...materialInvoices, {
-                id: `inv-${Date.now()}`,
-                name: `Invoice ${materialInvoices.length + 1}`,
-                imageUri: result.assets[0].uri,
-            }]);
+        if (result.canceled || !result.assets?.[0]) return;
+
+        setUploadingInvoice(true);
+        try {
+            const file = result.assets[0];
+            await ordersApi.uploadOrderInvoice(id!, file.uri, file.name);
+            await fetchOrder();
+            Alert.alert('Success', 'Invoice uploaded');
+        } catch (error) {
+            console.error('Failed to upload invoice:', error);
+            Alert.alert('Error', 'Failed to upload invoice');
+        } finally {
+            setUploadingInvoice(false);
         }
     };
 
-    const handleSaveMaterial = () => {
-        // TODO: Save material costs and invoices to API
-        setShowMaterialModal(false);
-        Alert.alert('Saved', 'Material details saved');
+    const handleUploadItemInvoice = async () => {
+        if (!selectedItem) return;
+
+        const result = await DocumentPicker.getDocumentAsync({
+            type: ['image/*', 'application/pdf'],
+        });
+
+        if (result.canceled || !result.assets?.[0]) return;
+
+        try {
+            const file = result.assets[0];
+            await ordersApi.uploadOrderItemInvoice(id!, selectedItem.id, file.uri, file.name);
+            await fetchOrder();
+            Alert.alert('Success', 'Item invoice uploaded');
+        } catch (error) {
+            console.error('Failed to upload item invoice:', error);
+            Alert.alert('Error', 'Failed to upload invoice');
+        }
     };
 
-    const handlePurchase = async () => {
+    const handleSaveVendorDetails = async () => {
         if (!vendor.vendorName.trim()) {
             Alert.alert('Required', 'Please enter vendor name');
             return;
         }
 
+        setSaving(true);
+        try {
+            await ordersApi.update(id!, vendor);
+            Alert.alert('Saved', 'Vendor details updated');
+        } catch (error) {
+            console.error('Failed to save vendor details:', error);
+            Alert.alert('Error', 'Failed to save vendor details');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleMarkAsPurchased = async () => {
+        if (!vendor.vendorName.trim()) {
+            Alert.alert('Required', 'Please enter vendor name before marking as purchased');
+            return;
+        }
+
         Alert.alert(
             'Confirm Purchase',
-            'Mark this indent as purchased?',
+            'Mark this order as purchased? This will update the indent status.',
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Purchase',
+                    text: 'Confirm',
                     onPress: async () => {
                         setSaving(true);
                         try {
-                            // TODO: API call to mark as purchased with vendor details
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                            setIsPurchased(true);
-                            Alert.alert('Success', 'Indent marked as purchased!', [
-                                { text: 'OK', onPress: () => router.back() }
-                            ]);
+                            // First save vendor details
+                            await ordersApi.update(id!, vendor);
+                            // Then mark as purchased
+                            await ordersApi.markAsPurchased(id!);
+                            await fetchOrder();
+                            Alert.alert('Success', 'Order marked as purchased!');
                         } catch (error) {
+                            console.error('Failed to mark as purchased:', error);
                             Alert.alert('Error', 'Failed to process purchase');
                         } finally {
                             setSaving(false);
@@ -189,38 +247,57 @@ export default function ProcessOrder() {
         );
     }
 
-    if (!indent) {
+    if (!order) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={styles.errorText}>Indent not found</Text>
+                <Text style={styles.errorText}>Order not found</Text>
             </View>
         );
     }
+
+    const isPurchased = order.isPurchased;
 
     return (
         <View style={styles.container}>
             <ScrollView style={styles.scrollView}>
                 {/* Header Info */}
                 <View style={styles.header}>
-                    <Text style={styles.indentName}>{indent.name || indent.indentNumber}</Text>
-                    <Text style={styles.indentNumber}>{indent.indentNumber}</Text>
+                    <View style={styles.headerTop}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.indentName}>{order.indent?.name || order.indent?.indentNumber}</Text>
+                            <Text style={styles.indentNumber}>{order.indent?.indentNumber}</Text>
+                        </View>
+                        <View style={[styles.statusBadge, isPurchased && styles.purchasedBadge]}>
+                            <Ionicons name={isPurchased ? "checkmark-circle" : "time"} size={14} color={isPurchased ? theme.colors.success : theme.colors.primary} />
+                            <Text style={[styles.statusText, isPurchased && styles.purchasedText]}>
+                                {isPurchased ? 'Purchased' : 'Pending'}
+                            </Text>
+                        </View>
+                    </View>
                     <View style={styles.infoRow}>
                         <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>{indent.site?.name}</Text>
+                        <Text style={styles.infoText}>{order.indent?.site?.name}</Text>
                     </View>
                     <View style={styles.infoRow}>
                         <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>Created: {formatDate(indent.createdAt)}</Text>
+                        <Text style={styles.infoText}>Created: {formatDate(order.createdAt)}</Text>
                     </View>
-                    <View style={styles.infoRow}>
-                        <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>Expected: {formatDate(indent.expectedDeliveryDate)}</Text>
+                    <View style={styles.totalRow}>
+                        <Text style={styles.totalLabel}>Total Amount:</Text>
+                        <Text style={styles.totalValue}>{formatCurrency(order.totalAmount)}</Text>
                     </View>
                 </View>
 
                 {/* Vendor Details Form */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Vendor Details</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Vendor Details</Text>
+                        {!isPurchased && (
+                            <TouchableOpacity onPress={handleSaveVendorDetails} disabled={saving}>
+                                <Text style={styles.saveLink}>{saving ? 'Saving...' : 'Save'}</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                     <View style={styles.formGroup}>
                         <Text style={styles.label}>Vendor Name *</Text>
                         <TextInput
@@ -228,6 +305,7 @@ export default function ProcessOrder() {
                             placeholder="Enter vendor name"
                             value={vendor.vendorName}
                             onChangeText={(text) => setVendor({ ...vendor, vendorName: text })}
+                            editable={!isPurchased}
                         />
                     </View>
                     <View style={styles.formGroup}>
@@ -238,26 +316,27 @@ export default function ProcessOrder() {
                             value={vendor.vendorAddress}
                             onChangeText={(text) => setVendor({ ...vendor, vendorAddress: text })}
                             multiline
+                            editable={!isPurchased}
                         />
                     </View>
-                    <View style={styles.formRow}>
-                        <View style={[styles.formGroup, { flex: 1 }]}>
-                            <Text style={styles.label}>GST No.</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="GST number"
-                                value={vendor.gstNo}
-                                onChangeText={(text) => setVendor({ ...vendor, gstNo: text })}
-                            />
-                        </View>
+                    <View style={styles.formGroup}>
+                        <Text style={styles.label}>GST No.</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="GST number"
+                            value={vendor.vendorGstNo}
+                            onChangeText={(text) => setVendor({ ...vendor, vendorGstNo: text })}
+                            editable={!isPurchased}
+                        />
                     </View>
                     <View style={styles.formGroup}>
                         <Text style={styles.label}>Contact Person</Text>
                         <TextInput
                             style={styles.input}
                             placeholder="Contact person name"
-                            value={vendor.contactPerson}
-                            onChangeText={(text) => setVendor({ ...vendor, contactPerson: text })}
+                            value={vendor.vendorContactPerson}
+                            onChangeText={(text) => setVendor({ ...vendor, vendorContactPerson: text })}
+                            editable={!isPurchased}
                         />
                     </View>
                     <View style={styles.formGroup}>
@@ -265,9 +344,10 @@ export default function ProcessOrder() {
                         <TextInput
                             style={styles.input}
                             placeholder="Phone number"
-                            value={vendor.contactPhone}
-                            onChangeText={(text) => setVendor({ ...vendor, contactPhone: text })}
+                            value={vendor.vendorContact}
+                            onChangeText={(text) => setVendor({ ...vendor, vendorContact: text })}
                             keyboardType="phone-pad"
+                            editable={!isPurchased}
                         />
                     </View>
                     <View style={styles.formGroup}>
@@ -275,29 +355,62 @@ export default function ProcessOrder() {
                         <TextInput
                             style={styles.input}
                             placeholder="e.g., Building Materials Supplier"
-                            value={vendor.natureOfBusiness}
-                            onChangeText={(text) => setVendor({ ...vendor, natureOfBusiness: text })}
+                            value={vendor.vendorNatureOfBusiness}
+                            onChangeText={(text) => setVendor({ ...vendor, vendorNatureOfBusiness: text })}
+                            editable={!isPurchased}
                         />
                     </View>
                 </View>
 
+                {/* Order Invoices */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Order Invoices</Text>
+                    {order.invoices?.map((invoice) => (
+                        <View key={invoice.id} style={styles.invoiceItem}>
+                            <Ionicons name="document-outline" size={20} color={theme.colors.primary} />
+                            <Text style={styles.invoiceName} numberOfLines={1}>{invoice.originalName || invoice.filename}</Text>
+                        </View>
+                    ))}
+                    {!isPurchased && (
+                        <TouchableOpacity 
+                            style={styles.addInvoiceButton} 
+                            onPress={handleUploadOrderInvoice}
+                            disabled={uploadingInvoice}
+                        >
+                            {uploadingInvoice ? (
+                                <ActivityIndicator size="small" color={theme.colors.primary} />
+                            ) : (
+                                <>
+                                    <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
+                                    <Text style={styles.addInvoiceText}>Upload Invoice</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    )}
+                </View>
+
                 {/* Materials List */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Materials ({indent.items?.length || 0})</Text>
-                    <Text style={styles.sectionSubtitle}>Tap to add cost and invoices</Text>
-                    {indent.items?.map((item) => (
+                    <Text style={styles.sectionTitle}>Materials ({order.orderItems?.length || 0})</Text>
+                    <Text style={styles.sectionSubtitle}>Tap to {isPurchased ? 'view' : 'edit'} cost and invoices</Text>
+                    {order.orderItems?.map((item) => (
                         <TouchableOpacity
                             key={item.id}
                             style={styles.materialCard}
                             onPress={() => openMaterialModal(item)}
                         >
                             <View style={styles.materialInfo}>
-                                <Text style={styles.materialName}>{item.material?.name}</Text>
-                                <Text style={styles.materialCode}>{item.material?.code}</Text>
+                                <Text style={styles.materialName}>{item.materialName}</Text>
+                                <Text style={styles.materialCode}>{item.materialCode}</Text>
+                                {item.unitPrice && item.unitPrice > 0 && (
+                                    <Text style={styles.materialCost}>
+                                        {formatCurrency(item.unitPrice)} × {item.quantity} = {formatCurrency(item.totalPrice)}
+                                    </Text>
+                                )}
                             </View>
                             <View style={styles.qtyBox}>
-                                <Text style={styles.qtyValue}>{item.requestedQty}</Text>
-                                <Text style={styles.qtyUnit}>{item.material?.unit?.code}</Text>
+                                <Text style={styles.qtyValue}>{item.quantity}</Text>
+                                <Text style={styles.qtyUnit}>{item.indentItem?.material?.unit?.code || ''}</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
@@ -308,28 +421,24 @@ export default function ProcessOrder() {
             </ScrollView>
 
             {/* Bottom Button */}
-            <View style={styles.bottomButtons}>
-                <TouchableOpacity
-                    style={[styles.purchaseButton, isPurchased && styles.purchasedButton]}
-                    onPress={handlePurchase}
-                    disabled={saving || isPurchased}
-                >
-                    {saving ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                        <>
-                            <Ionicons
-                                name={isPurchased ? "checkmark-circle" : "cart"}
-                                size={20}
-                                color="#FFFFFF"
-                            />
-                            <Text style={styles.purchaseButtonText}>
-                                {isPurchased ? 'Purchased' : 'Mark as Purchased'}
-                            </Text>
-                        </>
-                    )}
-                </TouchableOpacity>
-            </View>
+            {!isPurchased && (
+                <View style={styles.bottomButtons}>
+                    <TouchableOpacity
+                        style={styles.purchaseButton}
+                        onPress={handleMarkAsPurchased}
+                        disabled={saving}
+                    >
+                        {saving ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                        ) : (
+                            <>
+                                <Ionicons name="cart" size={20} color="#FFFFFF" />
+                                <Text style={styles.purchaseButtonText}>Mark as Purchased</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            )}
 
             {/* Material Cost Modal */}
             <Modal visible={showMaterialModal} animationType="slide" presentationStyle="pageSheet">
@@ -341,11 +450,11 @@ export default function ProcessOrder() {
                         </TouchableOpacity>
                     </View>
                     <ScrollView style={styles.modalContent}>
-                        {selectedMaterial && (
+                        {selectedItem && (
                             <>
                                 <View style={styles.materialHeader}>
-                                    <Text style={styles.materialModalName}>{selectedMaterial.material?.name}</Text>
-                                    <Text style={styles.materialModalCode}>{selectedMaterial.material?.code}</Text>
+                                    <Text style={styles.materialModalName}>{selectedItem.materialName}</Text>
+                                    <Text style={styles.materialModalCode}>{selectedItem.materialCode}</Text>
                                 </View>
 
                                 <Text style={styles.costSectionTitle}>Cost Details</Text>
@@ -359,6 +468,7 @@ export default function ProcessOrder() {
                                             onChangeText={(text) => setMaterialCost({ ...materialCost, rate: text })}
                                             onBlur={calculateTotal}
                                             keyboardType="decimal-pad"
+                                            editable={!isPurchased}
                                         />
                                     </View>
                                     <View style={[styles.formGroup, { flex: 1, marginLeft: 12 }]}>
@@ -370,29 +480,42 @@ export default function ProcessOrder() {
                                             onChangeText={(text) => setMaterialCost({ ...materialCost, quantity: text })}
                                             onBlur={calculateTotal}
                                             keyboardType="decimal-pad"
+                                            editable={!isPurchased}
                                         />
                                     </View>
                                 </View>
                                 <View style={styles.totalBox}>
                                     <Text style={styles.totalLabel}>Total</Text>
-                                    <Text style={styles.totalValue}>₹ {materialCost.total.toLocaleString('en-IN')}</Text>
+                                    <Text style={styles.totalBoxValue}>₹ {materialCost.total.toLocaleString('en-IN')}</Text>
                                 </View>
 
-                                <Text style={styles.costSectionTitle}>Invoices</Text>
-                                {materialInvoices.map((invoice) => (
-                                    <View key={invoice.id} style={styles.invoicePreview}>
-                                        <Image source={{ uri: invoice.imageUri }} style={styles.invoiceThumb} />
-                                        <Text style={styles.invoiceName}>{invoice.name}</Text>
+                                <Text style={styles.costSectionTitle}>Item Invoices</Text>
+                                {selectedItem.invoices?.map((invoice) => (
+                                    <View key={invoice.id} style={styles.invoiceItem}>
+                                        <Ionicons name="document-outline" size={20} color={theme.colors.primary} />
+                                        <Text style={styles.invoiceName} numberOfLines={1}>{invoice.originalName || invoice.filename}</Text>
                                     </View>
                                 ))}
-                                <TouchableOpacity style={styles.addInvoiceButton} onPress={handlePickInvoice}>
-                                    <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
-                                    <Text style={styles.addInvoiceText}>Add Invoice</Text>
-                                </TouchableOpacity>
+                                {!isPurchased && (
+                                    <TouchableOpacity style={styles.addInvoiceButton} onPress={handleUploadItemInvoice}>
+                                        <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
+                                        <Text style={styles.addInvoiceText}>Add Item Invoice</Text>
+                                    </TouchableOpacity>
+                                )}
 
-                                <TouchableOpacity style={styles.saveMaterialButton} onPress={handleSaveMaterial}>
-                                    <Text style={styles.saveMaterialButtonText}>Save</Text>
-                                </TouchableOpacity>
+                                {!isPurchased && (
+                                    <TouchableOpacity 
+                                        style={styles.saveMaterialButton} 
+                                        onPress={handleSaveItemCost}
+                                        disabled={savingItem}
+                                    >
+                                        {savingItem ? (
+                                            <ActivityIndicator color="#FFFFFF" size="small" />
+                                        ) : (
+                                            <Text style={styles.saveMaterialButtonText}>Save Cost</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                )}
                             </>
                         )}
                     </ScrollView>
@@ -408,13 +531,39 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     errorText: { fontSize: 16, color: theme.colors.textSecondary },
     header: { backgroundColor: theme.colors.cardBg, padding: 16, marginBottom: 8 },
-    indentName: { fontSize: 22, fontWeight: '700', color: theme.colors.textPrimary },
-    indentNumber: { fontSize: 13, color: theme.colors.textSecondary, fontFamily: 'monospace', marginTop: 2, marginBottom: 12 },
+    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+    indentName: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary },
+    indentNumber: { fontSize: 13, color: theme.colors.textSecondary, fontFamily: 'monospace', marginTop: 2 },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.primary + '15',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
+        gap: 4,
+    },
+    purchasedBadge: { backgroundColor: theme.colors.success + '15' },
+    statusText: { fontSize: 12, fontWeight: '600', color: theme.colors.primary },
+    purchasedText: { color: theme.colors.success },
     infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
     infoText: { fontSize: 14, color: theme.colors.textSecondary },
+    totalRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    totalLabel: { fontSize: 14, color: theme.colors.textSecondary },
+    totalValue: { fontSize: 20, fontWeight: '700', color: theme.colors.success },
     section: { padding: 16 },
-    sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 4 },
-    sectionSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginBottom: 12 },
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+    sectionSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: -8, marginBottom: 12 },
+    saveLink: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
     formGroup: { marginBottom: 14 },
     formRow: { flexDirection: 'row' },
     label: { fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 6 },
@@ -429,6 +578,18 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
     },
     textArea: { minHeight: 70, textAlignVertical: 'top' },
+    invoiceItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.cardBg,
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        gap: 10,
+    },
+    invoiceName: { fontSize: 14, color: theme.colors.textPrimary, flex: 1 },
     materialCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -442,6 +603,7 @@ const styles = StyleSheet.create({
     materialInfo: { flex: 1 },
     materialName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
     materialCode: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+    materialCost: { fontSize: 12, color: theme.colors.success, marginTop: 4, fontWeight: '500' },
     qtyBox: { alignItems: 'center', marginRight: 12 },
     qtyValue: { fontSize: 18, fontWeight: '700', color: theme.colors.primary },
     qtyUnit: { fontSize: 11, color: theme.colors.textSecondary },
@@ -464,7 +626,6 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         gap: 8,
     },
-    purchasedButton: { backgroundColor: theme.colors.success },
     purchaseButtonText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
     modalContainer: { flex: 1, backgroundColor: theme.colors.surface },
     modalHeader: {
@@ -491,20 +652,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         marginTop: 8,
     },
-    totalLabel: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
-    totalValue: { fontSize: 20, fontWeight: '700', color: theme.colors.primary },
-    invoicePreview: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.colors.cardBg,
-        padding: 10,
-        borderRadius: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    invoiceThumb: { width: 50, height: 50, borderRadius: 6, marginRight: 12 },
-    invoiceName: { fontSize: 14, color: theme.colors.textPrimary },
+    totalBoxValue: { fontSize: 20, fontWeight: '700', color: theme.colors.primary },
     addInvoiceButton: {
         flexDirection: 'row',
         alignItems: 'center',

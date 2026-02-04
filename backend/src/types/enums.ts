@@ -44,6 +44,8 @@ export enum AuditAction {
 
     // Receipt actions
     RECEIPT_CREATED = 'RECEIPT_CREATED',
+    RECEIPT_UPDATED = 'RECEIPT_UPDATED',
+    RECEIPT_DELETED = 'RECEIPT_DELETED',
     RECEIPT_IMAGE_UPLOADED = 'RECEIPT_IMAGE_UPLOADED',
 
     // Damage & Return actions

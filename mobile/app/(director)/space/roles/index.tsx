@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    RefreshControl,
+    ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { usersApi, RoleCounts } from '../../../../src/api/users.api';
 
 const theme = {
     colors: {
@@ -26,10 +29,11 @@ interface RoleCardProps {
     icon: keyof typeof Ionicons.glyphMap;
     color: string;
     count?: number;
+    loading?: boolean;
     onPress: () => void;
 }
 
-const RoleCard = ({ title, description, icon, color, count, onPress }: RoleCardProps) => (
+const RoleCard = ({ title, description, icon, color, count, loading, onPress }: RoleCardProps) => (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
         <View style={[styles.iconBox, { backgroundColor: color + '15' }]}>
             <Ionicons name={icon} size={28} color={color} />
@@ -38,7 +42,9 @@ const RoleCard = ({ title, description, icon, color, count, onPress }: RoleCardP
             <Text style={styles.cardTitle}>{title}</Text>
             <Text style={styles.cardDescription}>{description}</Text>
         </View>
-        {count !== undefined && (
+        {loading ? (
+            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginRight: 8 }} />
+        ) : count !== undefined && (
             <View style={styles.countBadge}>
                 <Text style={styles.countText}>{count}</Text>
             </View>
@@ -49,9 +55,38 @@ const RoleCard = ({ title, description, icon, color, count, onPress }: RoleCardP
 
 export default function RoleManagement() {
     const router = useRouter();
+    const [counts, setCounts] = useState<RoleCounts | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const fetchCounts = useCallback(async () => {
+        try {
+            const data = await usersApi.getRoleCounts();
+            setCounts(data);
+        } catch (error) {
+            console.error('Failed to fetch role counts:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchCounts();
+    }, [fetchCounts]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchCounts();
+    }, [fetchCounts]);
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView 
+            style={styles.container}
+            refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+        >
             <Text style={styles.pageDescription}>Manage team members and their roles</Text>
 
             <RoleCard
@@ -59,7 +94,8 @@ export default function RoleManagement() {
                 description="On-site engineers managing indents"
                 icon="construct-outline"
                 color="#F59E0B"
-                count={12}
+                count={counts?.siteEngineers}
+                loading={loading}
                 onPress={() => router.push('/(director)/space/roles/engineers' as any)}
             />
 
@@ -68,7 +104,8 @@ export default function RoleManagement() {
                 description="Team handling purchases and orders"
                 icon="cart-outline"
                 color="#3B82F6"
-                count={4}
+                count={counts?.purchaseTeam}
+                loading={loading}
                 onPress={() => router.push('/(director)/space/roles/purchase-team' as any)}
             />
 
@@ -77,7 +114,8 @@ export default function RoleManagement() {
                 description="Directors with full access"
                 icon="shield-outline"
                 color="#8B5CF6"
-                count={2}
+                count={counts?.directors}
+                loading={loading}
                 onPress={() => router.push('/(director)/space/roles/directors' as any)}
             />
 

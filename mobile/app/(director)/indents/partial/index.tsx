@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -8,8 +8,10 @@ import {
     RefreshControl,
     ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { indentsApi } from '../../../../src/api/indents.api';
+import { Indent } from '../../../../src/types';
 
 const theme = {
     colors: {
@@ -23,72 +25,83 @@ const theme = {
     }
 };
 
-interface PartialOrder {
-    id: string;
-    indentName: string;
-    siteName: string;
-    receivedItems: number;
-    totalItems: number;
-    reportedBy: string;
-    reportedDate: string;
-}
-
 export default function PartialOrdersList() {
-    const [orders, setOrders] = useState<PartialOrder[]>([]);
+    const [indents, setIndents] = useState<Indent[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const router = useRouter();
 
-    const fetchOrders = useCallback(async () => {
+    const fetchIndents = useCallback(async () => {
         try {
-            // TODO: Replace with actual API call
-            setOrders([
-                { id: '1', indentName: 'Plumbing Materials', siteName: 'Riverside', receivedItems: 3, totalItems: 6, reportedBy: 'Amit Patel', reportedDate: '2024-02-01' },
-                { id: '2', indentName: 'Finishing Work', siteName: 'Green Valley', receivedItems: 5, totalItems: 10, reportedBy: 'Rajesh Kumar', reportedDate: '2024-01-30' },
-            ]);
+            // Get indents with PARTIALLY_RECEIVED status
+            const response = await indentsApi.getAll({
+                status: 'PARTIALLY_RECEIVED',
+                limit: 50,
+            });
+            // Sort by date, newest first
+            const sortedData = [...response.data].sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            setIndents(sortedData);
         } catch (error) {
-            console.error('Failed to fetch orders:', error);
+            console.error('Failed to fetch indents:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchOrders();
-    }, [fetchOrders]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchIndents();
+        }, [fetchIndents])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
-        fetchOrders();
+        fetchIndents();
     };
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     };
 
-    const renderOrder = ({ item }: { item: PartialOrder }) => (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/(director)/indents/partial/${item.id}` as any)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.cardIcon}>
-                <Ionicons name="pie-chart" size={24} color={theme.colors.warning} />
-            </View>
-            <View style={styles.cardContent}>
-                <Text style={styles.indentName}>{item.indentName}</Text>
-                <Text style={styles.siteText}>{item.siteName}</Text>
-                <Text style={styles.metaText}>
-                    {item.receivedItems}/{item.totalItems} items received • {formatDate(item.reportedDate)}
-                </Text>
-            </View>
-            <View style={styles.progressBadge}>
-                <Text style={styles.progressText}>{Math.round(item.receivedItems / item.totalItems * 100)}%</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-        </TouchableOpacity>
-    );
+    const calculateProgress = (indent: Indent) => {
+        const items = indent.items || [];
+        if (items.length === 0) return { received: 0, total: 0, percent: 0 };
+
+        const arrivedItems = items.filter(i => i.arrivalStatus === 'ARRIVED').length;
+        const percent = Math.round((arrivedItems / items.length) * 100);
+        return { received: arrivedItems, total: items.length, percent };
+    };
+
+    const renderIndent = ({ item }: { item: Indent }) => {
+        const siteName = item.site?.name || 'Unknown Site';
+        const progress = calculateProgress(item);
+
+        return (
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() => router.push(`/(director)/indents/${item.id}` as any)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.cardIcon}>
+                    <Ionicons name="pie-chart" size={24} color={theme.colors.warning} />
+                </View>
+                <View style={styles.cardContent}>
+                    <Text style={styles.indentName}>{item.name}</Text>
+                    <Text style={styles.siteText}>{siteName}</Text>
+                    <Text style={styles.metaText}>
+                        {progress.received}/{progress.total} items received • {formatDate(item.updatedAt || item.createdAt)}
+                    </Text>
+                </View>
+                <View style={styles.progressBadge}>
+                    <Text style={styles.progressText}>{progress.percent}%</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+        );
+    };
 
     if (loading && !refreshing) {
         return (
@@ -117,9 +130,9 @@ export default function PartialOrdersList() {
             </View>
 
             <FlatList
-                data={orders}
+                data={indents}
                 keyExtractor={item => item.id}
-                renderItem={renderOrder}
+                renderItem={renderIndent}
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={

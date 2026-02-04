@@ -1,16 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
-import { ROLE_NAMES } from '../../src/constants';
-import { indentsApi } from '../../src/api';
+import { useAuth } from '../../src/context';
+import { Role, ROLE_NAMES } from '../../src/constants';
+import { indentsApi, damagesApi, reportsApi } from '../../src/api';
 import NotificationCenter from '../../src/components/NotificationCenter';
 
 const theme = {
@@ -23,6 +25,8 @@ const theme = {
         white: '#FFFFFF',
         cardBg: '#FFFFFF',
         badge: '#EF4444',
+        success: '#10B981',
+        warning: '#F59E0B',
     }
 };
 
@@ -34,30 +38,55 @@ interface MenuItemData {
     badgeCount?: number;
 }
 
+interface DashboardStats {
+    totalIndents: number;
+    pendingIndents: number;
+    closedSites: number;
+    totalExpense: number;
+}
+
 export default function PurchaseTeamDashboard() {
-    const [user, setUser] = useState<any>(null);
+    const { user } = useAuth();
     const router = useRouter();
     const [pendingCount, setPendingCount] = useState(0);
+    const [damagesCount, setDamagesCount] = useState(0);
+    const [partialCount, setPartialCount] = useState(0);
+    const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
 
-    useEffect(() => {
-        loadUser();
-        fetchPendingCount();
+    const fetchDashboardData = useCallback(async () => {
+        try {
+            // Fetch pending indents count
+            const pendingResponse = await indentsApi.getAll({ status: 'SUBMITTED', limit: 1 });
+            setPendingCount(pendingResponse.pagination.total);
+
+            // Fetch unresolved damages count
+            const damagesResponse = await damagesApi.getAll({ isResolved: false, limit: 1 });
+            setDamagesCount(damagesResponse.pagination.total);
+
+            // Fetch partial deliveries count
+            const partialResponse = await damagesApi.getPartiallyReceivedIndents({ limit: 1 });
+            setPartialCount(partialResponse.pagination.total);
+
+            // Fetch dashboard summary stats
+            const dashboardStats = await reportsApi.getDashboardSummary({});
+            setStats(dashboardStats);
+        } catch (error) {
+            console.error('Failed to fetch dashboard data:', error);
+        }
     }, []);
 
-    const loadUser = async () => {
-        try {
-            const userJson = await SecureStore.getItemAsync('auth_user');
-            if (userJson) setUser(JSON.parse(userJson));
-        } catch (e) { }
-    };
+    // Refresh on screen focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchDashboardData();
+        }, [fetchDashboardData])
+    );
 
-    const fetchPendingCount = async () => {
-        try {
-            const response = await indentsApi.getAll({ status: 'SUBMITTED', limit: 100 });
-            setPendingCount(response.data.length);
-        } catch (error) {
-            console.error('Failed to fetch pending count:', error);
-        }
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await fetchDashboardData();
+        setRefreshing(false);
     };
 
     const menuItems: MenuItemData[] = [
@@ -85,12 +114,14 @@ export default function PurchaseTeamDashboard() {
             subtitle: 'Handle damaged materials',
             icon: 'alert-circle-outline',
             route: '/(purchase-team)/damages',
+            badgeCount: damagesCount,
         },
         {
             title: 'Partially Received',
             subtitle: 'Manage partial deliveries',
             icon: 'hourglass-outline',
             route: '/(purchase-team)/partial',
+            badgeCount: partialCount,
         },
         {
             title: 'Analytics',
@@ -99,6 +130,14 @@ export default function PurchaseTeamDashboard() {
             route: '/(purchase-team)/analytics',
         },
     ];
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            maximumFractionDigits: 0,
+        }).format(amount);
+    };
 
     const MenuCard = ({ item }: { item: MenuItemData }) => (
         <TouchableOpacity
@@ -129,7 +168,12 @@ export default function PurchaseTeamDashboard() {
     );
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView 
+            style={styles.container}
+            refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+        >
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerContent}>
@@ -137,7 +181,7 @@ export default function PurchaseTeamDashboard() {
                         <Text style={styles.greeting}>Welcome back,</Text>
                         <Text style={styles.name}>{user?.name || 'User'}</Text>
                         <Text style={styles.role}>
-                            {user?.role ? ROLE_NAMES[user.role] : 'Purchase Team'}
+                            {user?.role ? ROLE_NAMES[user.role as Role] : 'Purchase Team'}
                         </Text>
                     </View>
                     <View style={styles.headerActions}>
@@ -151,6 +195,28 @@ export default function PurchaseTeamDashboard() {
                     </View>
                 </View>
             </View>
+
+            {/* Stats Cards */}
+            {stats && (
+                <View style={styles.statsContainer}>
+                    <View style={styles.statsRow}>
+                        <View style={[styles.statCard, { backgroundColor: theme.colors.primary }]}>
+                            <Text style={styles.statValue}>{stats.totalIndents}</Text>
+                            <Text style={styles.statLabel}>Total Indents</Text>
+                        </View>
+                        <View style={[styles.statCard, { backgroundColor: theme.colors.warning }]}>
+                            <Text style={styles.statValue}>{stats.pendingIndents}</Text>
+                            <Text style={styles.statLabel}>Pending</Text>
+                        </View>
+                    </View>
+                    <View style={styles.statsRow}>
+                        <View style={[styles.statCard, { backgroundColor: theme.colors.success }]}>
+                            <Text style={styles.statValue}>{formatCurrency(stats.totalExpense)}</Text>
+                            <Text style={styles.statLabel}>Total Expense</Text>
+                        </View>
+                    </View>
+                </View>
+            )}
 
             {/* Menu Items */}
             <View style={styles.section}>
@@ -268,5 +334,31 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         color: theme.colors.white,
+    },
+    statsContainer: {
+        paddingHorizontal: 16,
+        paddingTop: 16,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 12,
+    },
+    statCard: {
+        flex: 1,
+        borderRadius: 12,
+        padding: 16,
+        minHeight: 80,
+        justifyContent: 'center',
+    },
+    statValue: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.white,
+    },
+    statLabel: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.85)',
+        marginTop: 4,
     },
 });

@@ -36,3 +36,10 @@ export const updateUserValidation = [
         .isBoolean()
         .withMessage('isActive must be a boolean'),
 ];
+
+export const demoteUserValidation = [
+    body('siteId')
+        .optional()
+        .isUUID()
+        .withMessage('Site ID must be a valid UUID when demoting to Site Engineer'),
+];

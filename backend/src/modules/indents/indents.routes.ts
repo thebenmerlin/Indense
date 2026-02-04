@@ -3,13 +3,17 @@ import { indentsController } from './indents.controller';
 import { authenticate } from '../../middleware/authenticate';
 import { authorize, requireSiteEngineer, requirePurchaseTeam, requireDirector, requireHeadOffice } from '../../middleware/authorize';
 import { validateRequest } from '../../middleware/validateRequest';
-import { createIndentValidation, approveIndentValidation, rejectIndentValidation } from './indents.validation';
+import { createIndentValidation, approveIndentValidation, rejectIndentValidation, updateArrivalStatusValidation, onHoldValidation } from './indents.validation';
 import { applySiteFilter } from '../../middleware/siteFilter';
 
 const router = Router();
 
 router.use(authenticate);
 router.use(applySiteFilter());
+
+// Dashboard stats - Head office only
+router.get('/pending-count', requireHeadOffice, indentsController.getPendingCount.bind(indentsController));
+router.get('/stats', requireHeadOffice, indentsController.getStats.bind(indentsController));
 
 // List and view - all authenticated users (with site filtering)
 router.get('/', indentsController.findAll.bind(indentsController));
@@ -21,6 +25,21 @@ router.post(
     requireSiteEngineer,
     validateRequest(createIndentValidation),
     indentsController.create.bind(indentsController)
+);
+
+// Update arrival status - Site Engineer only
+router.patch(
+    '/:id/items/:itemId/arrival',
+    requireSiteEngineer,
+    validateRequest(updateArrivalStatusValidation),
+    indentsController.updateArrivalStatus.bind(indentsController)
+);
+
+// Close by Site Engineer
+router.post(
+    '/:id/close-by-engineer',
+    requireSiteEngineer,
+    indentsController.closeByEngineer.bind(indentsController)
 );
 
 // Purchase team approval
@@ -37,6 +56,21 @@ router.post(
     requireDirector,
     validateRequest(approveIndentValidation),
     indentsController.directorApprove.bind(indentsController)
+);
+
+// On hold - Director only
+router.post(
+    '/:id/on-hold',
+    requireDirector,
+    validateRequest(onHoldValidation),
+    indentsController.putOnHold.bind(indentsController)
+);
+
+// Release from hold - Director only
+router.post(
+    '/:id/release-hold',
+    requireDirector,
+    indentsController.releaseFromHold.bind(indentsController)
 );
 
 // Reject - Purchase Team or Director

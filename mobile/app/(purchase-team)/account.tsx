@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
-import { ROLE_NAMES } from '../../src/constants';
+import { useAuth } from '../../src/context';
+import { Role, ROLE_NAMES } from '../../src/constants';
 
 const theme = {
     colors: {
@@ -28,32 +28,12 @@ const theme = {
 };
 
 export default function AccountScreen() {
-    const [user, setUser] = useState<any>(null);
+    const { user, logout } = useAuth();
     const router = useRouter();
     const [darkMode, setDarkMode] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteConfirmName, setDeleteConfirmName] = useState('');
     const [deleting, setDeleting] = useState(false);
-
-    useEffect(() => {
-        loadUser();
-    }, []);
-
-    const loadUser = async () => {
-        try {
-            const userJson = await SecureStore.getItemAsync('auth_user');
-            if (userJson) setUser(JSON.parse(userJson));
-        } catch (e) { }
-    };
-
-    const logout = async () => {
-        try {
-            await SecureStore.deleteItemAsync('auth_access_token');
-            await SecureStore.deleteItemAsync('auth_refresh_token');
-            await SecureStore.deleteItemAsync('auth_user');
-        } catch (e) { }
-    };
-
     const handleLogout = () => {
         Alert.alert(
             'Logout',
@@ -115,7 +95,7 @@ export default function AccountScreen() {
                 <Text style={styles.userEmail}>{user?.email}</Text>
                 <View style={styles.roleBadge}>
                     <Text style={styles.roleText}>
-                        {user?.role ? ROLE_NAMES[user.role] : 'Purchase Team'}
+                        {user?.role ? ROLE_NAMES[user.role as Role] : 'Purchase Team'}
                     </Text>
                 </View>
             </View>
@@ -134,7 +114,7 @@ export default function AccountScreen() {
                     </View>
                     <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Role</Text>
-                        <Text style={styles.infoValue}>{user?.role ? ROLE_NAMES[user.role] : '-'}</Text>
+                        <Text style={styles.infoValue}>{user?.role ? ROLE_NAMES[user.role as Role] : '-'}</Text>
                     </View>
                 </View>
             </View>

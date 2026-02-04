@@ -13,8 +13,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { indentsApi } from '../../../src/api';
-import { Indent, IndentItem } from '../../../src/types';
+import { damagesApi } from '../../../src/api';
+import { DamageReport } from '../../../src/types';
 
 const theme = {
     colors: {
@@ -26,50 +26,42 @@ const theme = {
         border: '#D1D5DB',
         success: '#10B981',
         error: '#EF4444',
+        warning: '#F59E0B',
     }
 };
 
-interface DamageReport {
-    materialId: string;
-    materialName: string;
-    name: string;
-    description: string;
-    imageUri?: string;
-}
+const getSeverityColor = (severity: string) => {
+    switch (severity) {
+        case 'SEVERE': return theme.colors.error;
+        case 'MODERATE': return theme.colors.warning;
+        case 'MINOR': return theme.colors.textSecondary;
+        default: return theme.colors.textSecondary;
+    }
+};
 
 export default function DamageDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const [indent, setIndent] = useState<Indent | null>(null);
+    const [damage, setDamage] = useState<DamageReport | null>(null);
     const [loading, setLoading] = useState(true);
     const [reordering, setReordering] = useState(false);
-    const [isReordered, setIsReordered] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [expectedDate, setExpectedDate] = useState(new Date());
-    const [showDamageModal, setShowDamageModal] = useState(false);
-    const [selectedDamage, setSelectedDamage] = useState<DamageReport | null>(null);
-
-    // Mock damaged materials for demo
-    const [damages] = useState<DamageReport[]>([
-        {
-            materialId: '1',
-            materialName: 'Cement Bags',
-            name: 'Water Damage',
-            description: '50 bags damaged due to water leak during transit',
-            imageUri: undefined,
-        },
-    ]);
+    const [showImageModal, setShowImageModal] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
     useEffect(() => {
-        if (id) fetchIndent();
+        if (id) fetchDamage();
     }, [id]);
 
-    const fetchIndent = async () => {
+    const fetchDamage = async () => {
         try {
-            const data = await indentsApi.getById(id!);
-            setIndent(data);
+            const data = await damagesApi.getById(id!);
+            setDamage(data);
+            // If already reordered, disable the reorder button
         } catch (error) {
-            console.error('Failed to fetch indent:', error);
+            console.error('Failed to fetch damage:', error);
+            Alert.alert('Error', 'Failed to load damage report');
         } finally {
             setLoading(false);
         }
@@ -88,9 +80,8 @@ export default function DamageDetail() {
     const handleReorder = async () => {
         setReordering(true);
         try {
-            // TODO: API call to reorder with expected date
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            setIsReordered(true);
+            await damagesApi.reorder(id!, expectedDate.toISOString());
+            setDamage(prev => prev ? { ...prev, isReordered: true, reorderExpectedDate: expectedDate.toISOString() } : null);
             Alert.alert('Success', 'Reorder placed successfully');
         } catch (error) {
             Alert.alert('Error', 'Failed to place reorder');
@@ -100,9 +91,11 @@ export default function DamageDetail() {
         }
     };
 
-    const openDamageDetail = (damage: DamageReport) => {
-        setSelectedDamage(damage);
-        setShowDamageModal(true);
+    const openImageModal = (imagePath: string) => {
+        // Convert path to full URL if needed
+        const imageUrl = imagePath.startsWith('http') ? imagePath : `https://your-server.com/${imagePath}`;
+        setSelectedImage(imageUrl);
+        setShowImageModal(true);
     };
 
     if (loading) {
@@ -113,86 +106,142 @@ export default function DamageDetail() {
         );
     }
 
-    if (!indent) {
+    if (!damage) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={styles.errorText}>Indent not found</Text>
+                <Text style={styles.errorText}>Damage report not found</Text>
             </View>
         );
     }
+
+    const severityColor = getSeverityColor(damage.severity);
 
     return (
         <View style={styles.container}>
             <ScrollView style={styles.scrollView}>
                 {/* Header Info */}
-                <View style={styles.header}>
-                    <Text style={styles.indentName}>{indent.name || indent.indentNumber}</Text>
-                    <Text style={styles.indentNumber}>{indent.indentNumber}</Text>
+                <View style={[styles.header, { borderLeftColor: severityColor }]}>
+                    <View style={styles.headerTop}>
+                        <Text style={styles.materialName}>
+                            {damage.indentItem?.material?.name || damage.name}
+                        </Text>
+                        <View style={[styles.severityBadge, { backgroundColor: severityColor + '20' }]}>
+                            <Text style={[styles.severityText, { color: severityColor }]}>
+                                {damage.severity}
+                            </Text>
+                        </View>
+                    </View>
+                    <Text style={styles.indentNumber}>{damage.indent?.indentNumber}</Text>
+                    
                     <View style={styles.infoRow}>
                         <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>{indent.site?.name}</Text>
+                        <Text style={styles.infoText}>{damage.site?.name}</Text>
                     </View>
                     <View style={styles.infoRow}>
                         <Ionicons name="person-outline" size={14} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>{indent.createdBy?.name}</Text>
+                        <Text style={styles.infoText}>Reported by: {damage.reportedBy?.name}</Text>
                     </View>
                     <View style={styles.infoRow}>
                         <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
-                        <Text style={styles.infoText}>Created: {formatDate(indent.createdAt)}</Text>
+                        <Text style={styles.infoText}>Reported: {formatDate(damage.createdAt)}</Text>
+                    </View>
+                    {damage.damagedQty && (
+                        <View style={styles.infoRow}>
+                            <Ionicons name="cube-outline" size={14} color={theme.colors.textSecondary} />
+                            <Text style={styles.infoText}>Damaged Qty: {damage.damagedQty}</Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Status Info */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Status</Text>
+                    <View style={styles.statusCard}>
+                        <View style={styles.statusRow}>
+                            <Text style={styles.statusLabel}>Current Status</Text>
+                            <View style={[styles.statusBadge, damage.isReordered && styles.reorderedBadge]}>
+                                <Text style={[styles.statusBadgeText, damage.isReordered && styles.reorderedText]}>
+                                    {damage.isReordered ? 'REORDERED' : damage.status}
+                                </Text>
+                            </View>
+                        </View>
+                        {damage.isReordered && damage.reorderExpectedDate && (
+                            <View style={styles.statusRow}>
+                                <Text style={styles.statusLabel}>Expected Delivery</Text>
+                                <Text style={styles.statusValue}>{formatDate(damage.reorderExpectedDate)}</Text>
+                            </View>
+                        )}
+                        {damage.reorderedBy && (
+                            <View style={styles.statusRow}>
+                                <Text style={styles.statusLabel}>Reordered By</Text>
+                                <Text style={styles.statusValue}>{damage.reorderedBy.name}</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 
-                {/* Damaged Materials List */}
+                {/* Description */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Damaged Materials</Text>
-                    {damages.map((damage) => (
-                        <TouchableOpacity
-                            key={damage.materialId}
-                            style={styles.damageCard}
-                            onPress={() => openDamageDetail(damage)}
-                        >
-                            <View style={styles.damageIcon}>
-                                <Ionicons name="alert-circle" size={20} color={theme.colors.error} />
-                            </View>
-                            <View style={styles.damageInfo}>
-                                <Text style={styles.damageMaterial}>{damage.materialName}</Text>
-                                <Text style={styles.damageName}>{damage.name}</Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-                    ))}
-
-                    {damages.length === 0 && (
-                        <Text style={styles.noItems}>No damaged materials reported</Text>
-                    )}
+                    <Text style={styles.sectionTitle}>Description</Text>
+                    <View style={styles.descriptionCard}>
+                        <Text style={styles.descriptionText}>{damage.description}</Text>
+                    </View>
                 </View>
+
+                {/* Photos */}
+                {damage.images && damage.images.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Photos ({damage.images.length})</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
+                            {damage.images.map((image) => (
+                                <TouchableOpacity
+                                    key={image.id}
+                                    onPress={() => openImageModal(image.path)}
+                                >
+                                    <Image
+                                        source={{ uri: image.path }}
+                                        style={styles.imageThumbnail}
+                                    />
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
 
                 <View style={{ height: 120 }} />
             </ScrollView>
 
-            {/* Reorder Button */}
-            <View style={styles.bottomButtons}>
-                <TouchableOpacity
-                    style={[styles.reorderButton, isReordered && styles.reorderedButton]}
-                    onPress={() => setShowDatePicker(true)}
-                    disabled={reordering || isReordered}
-                >
-                    {reordering ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                        <>
-                            <Ionicons
-                                name={isReordered ? "checkmark-circle" : "refresh"}
-                                size={20}
-                                color="#FFFFFF"
-                            />
-                            <Text style={styles.reorderButtonText}>
-                                {isReordered ? 'Reordered' : 'Reorder'}
-                            </Text>
-                        </>
-                    )}
-                </TouchableOpacity>
-            </View>
+            {/* Reorder Button - only show if not already reordered or resolved */}
+            {!damage.isReordered && !damage.isResolved && (
+                <View style={styles.bottomButtons}>
+                    <TouchableOpacity
+                        style={styles.reorderButton}
+                        onPress={() => setShowDatePicker(true)}
+                        disabled={reordering}
+                    >
+                        {reordering ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                        ) : (
+                            <>
+                                <Ionicons name="refresh" size={20} color="#FFFFFF" />
+                                <Text style={styles.reorderButtonText}>Reorder Material</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Already reordered indicator */}
+            {damage.isReordered && (
+                <View style={styles.bottomButtons}>
+                    <View style={[styles.reorderButton, styles.reorderedButton]}>
+                        <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                        <Text style={styles.reorderButtonText}>
+                            Reordered - Expected: {formatDate(damage.reorderExpectedDate)}
+                        </Text>
+                    </View>
+                </View>
+            )}
 
             {/* Date Picker Modal */}
             <Modal visible={showDatePicker} transparent animationType="fade">
@@ -224,36 +273,17 @@ export default function DamageDetail() {
                 </View>
             </Modal>
 
-            {/* Damage Detail Modal */}
-            <Modal visible={showDamageModal} animationType="slide" presentationStyle="pageSheet">
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Damage Details</Text>
-                        <TouchableOpacity onPress={() => setShowDamageModal(false)}>
-                            <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-                        </TouchableOpacity>
-                    </View>
-                    {selectedDamage && (
-                        <ScrollView style={styles.modalContent}>
-                            <Text style={styles.detailLabel}>Material</Text>
-                            <Text style={styles.detailValue}>{selectedDamage.materialName}</Text>
-
-                            <Text style={styles.detailLabel}>Damage Name</Text>
-                            <Text style={styles.detailValue}>{selectedDamage.name}</Text>
-
-                            <Text style={styles.detailLabel}>Description</Text>
-                            <Text style={styles.detailValue}>{selectedDamage.description}</Text>
-
-                            {selectedDamage.imageUri && (
-                                <>
-                                    <Text style={styles.detailLabel}>Photo</Text>
-                                    <Image
-                                        source={{ uri: selectedDamage.imageUri }}
-                                        style={styles.damagePhoto}
-                                    />
-                                </>
-                            )}
-                        </ScrollView>
+            {/* Image Preview Modal */}
+            <Modal visible={showImageModal} transparent animationType="fade">
+                <View style={styles.imageModalOverlay}>
+                    <TouchableOpacity
+                        style={styles.imageModalClose}
+                        onPress={() => setShowImageModal(false)}
+                    >
+                        <Ionicons name="close" size={28} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    {selectedImage && (
+                        <Image source={{ uri: selectedImage }} style={styles.fullImage} resizeMode="contain" />
                     )}
                 </View>
             </Modal>
@@ -266,30 +296,62 @@ const styles = StyleSheet.create({
     scrollView: { flex: 1 },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     errorText: { fontSize: 16, color: theme.colors.textSecondary },
-    header: { backgroundColor: theme.colors.cardBg, padding: 16, marginBottom: 8 },
-    indentName: { fontSize: 22, fontWeight: '700', color: theme.colors.textPrimary },
-    indentNumber: { fontSize: 13, color: theme.colors.textSecondary, fontFamily: 'monospace', marginTop: 2, marginBottom: 12 },
+    header: {
+        backgroundColor: theme.colors.cardBg,
+        padding: 16,
+        marginBottom: 8,
+        borderLeftWidth: 4,
+    },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+    },
+    materialName: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, flex: 1 },
+    severityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    severityText: { fontSize: 11, fontWeight: '700' },
+    indentNumber: { fontSize: 13, color: theme.colors.textSecondary, fontFamily: 'monospace', marginTop: 4, marginBottom: 12 },
     infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
     infoText: { fontSize: 14, color: theme.colors.textSecondary },
     section: { padding: 16 },
     sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 12 },
-    damageCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    statusCard: {
         backgroundColor: theme.colors.cardBg,
-        padding: 14,
-        borderRadius: 10,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: theme.colors.error + '30',
-        borderLeftWidth: 4,
-        borderLeftColor: theme.colors.error,
+        borderRadius: 12,
+        padding: 16,
     },
-    damageIcon: { marginRight: 12 },
-    damageInfo: { flex: 1 },
-    damageMaterial: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
-    damageName: { fontSize: 13, color: theme.colors.error, marginTop: 2 },
-    noItems: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', padding: 24 },
+    statusRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    statusLabel: { fontSize: 14, color: theme.colors.textSecondary },
+    statusValue: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
+    statusBadge: {
+        backgroundColor: theme.colors.warning + '20',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    statusBadgeText: { fontSize: 11, fontWeight: '700', color: theme.colors.warning },
+    reorderedBadge: { backgroundColor: theme.colors.primary + '20' },
+    reorderedText: { color: theme.colors.primary },
+    descriptionCard: {
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 12,
+        padding: 16,
+    },
+    descriptionText: { fontSize: 14, color: theme.colors.textPrimary, lineHeight: 22 },
+    imagesScroll: { marginTop: 8 },
+    imageThumbnail: {
+        width: 100,
+        height: 100,
+        borderRadius: 8,
+        marginRight: 12,
+    },
     bottomButtons: {
         position: 'absolute',
         bottom: 0,
@@ -310,7 +372,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     reorderedButton: { backgroundColor: theme.colors.success },
-    reorderButtonText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
+    reorderButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
     dateModalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -342,19 +404,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     dateModalConfirmText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
-    modalContainer: { flex: 1, backgroundColor: theme.colors.surface },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    imageModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        justifyContent: 'center',
         alignItems: 'center',
-        padding: 16,
-        backgroundColor: theme.colors.cardBg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
     },
-    modalTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
-    modalContent: { flex: 1, padding: 16 },
-    detailLabel: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 12 },
-    detailValue: { fontSize: 16, fontWeight: '500', color: theme.colors.textPrimary, marginTop: 4 },
-    damagePhoto: { width: '100%', height: 200, borderRadius: 10, marginTop: 8 },
+    imageModalClose: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+        zIndex: 10,
+    },
+    fullImage: {
+        width: '100%',
+        height: '80%',
+    },
 });

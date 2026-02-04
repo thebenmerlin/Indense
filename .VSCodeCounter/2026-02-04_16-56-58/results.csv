@@ -1,0 +1,124 @@
+"filename", "language", "TypeScript", "TypeScript JSX", "Gradle", "Java Properties", "JSON with Comments", "XML", "Batch", "JavaScript", "JSON", "comment", "blank", "total"
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/build.gradle", "Gradle", 0, 0, 92, 0, 0, 0, 0, 0, 0, 68, 23, 183
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/debug/AndroidManifest.xml", "XML", 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 3, 8
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/debugOptimized/AndroidManifest.xml", "XML", 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 3, 8
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/AndroidManifest.xml", "XML", 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 32
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/drawable/ic_launcher_background.xml", "XML", 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 6
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/drawable/rn_edit_text_material.xml", "XML", 0, 0, 0, 0, 0, 12, 0, 0, 0, 23, 3, 38
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "XML", 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 5
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "XML", 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 5
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values-night/colors.xml", "XML", 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values/colors.xml", "XML", 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 6
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values/strings.xml", "XML", 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 5
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/app/src/main/res/values/styles.xml", "XML", 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 14
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/build.gradle", "Gradle", 0, 0, 20, 0, 0, 0, 0, 0, 0, 1, 4, 25
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/gradle.properties", "Java Properties", 0, 0, 0, 14, 0, 0, 0, 0, 0, 37, 15, 66
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/gradle/wrapper/gradle-wrapper.properties", "Java Properties", 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 1, 8
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/gradlew.bat", "Batch", 0, 0, 0, 0, 0, 0, 41, 0, 0, 32, 22, 95
+"/Users/gajanan/Documents/Indense/scraps/mobile/android/settings.gradle", "Gradle", 0, 0, 33, 0, 0, 0, 0, 0, 0, 0, 7, 40
+"/Users/gajanan/Documents/Indense/scraps/mobile/app.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 0, 50, 0, 0, 50
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/_layout.tsx", "TypeScript JSX", 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 2, 11
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/forgot-password.tsx", "TypeScript JSX", 0, 519, 0, 0, 0, 0, 0, 0, 0, 8, 43, 570
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/login.tsx", "TypeScript JSX", 0, 348, 0, 0, 0, 0, 0, 0, 0, 4, 28, 380
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(auth)/register.tsx", "TypeScript JSX", 0, 678, 0, 0, 0, 0, 0, 0, 0, 5, 58, 741
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/_layout.tsx", "TypeScript JSX", 0, 42, 0, 0, 0, 0, 0, 0, 0, 0, 2, 44
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/account.tsx", "TypeScript JSX", 0, 367, 0, 0, 0, 0, 0, 0, 0, 9, 15, 391
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/damage-report.tsx", "TypeScript JSX", 0, 192, 0, 0, 0, 0, 0, 0, 0, 3, 16, 211
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/financial.tsx", "TypeScript JSX", 0, 207, 0, 0, 0, 0, 0, 0, 0, 5, 16, 228
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/index.tsx", "TypeScript JSX", 0, 318, 0, 0, 0, 0, 0, 0, 0, 6, 18, 342
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/materials.tsx", "TypeScript JSX", 0, 145, 0, 0, 0, 0, 0, 0, 0, 1, 10, 156
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/analytics/vendors.tsx", "TypeScript JSX", 0, 167, 0, 0, 0, 0, 0, 0, 0, 1, 13, 181
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/dashboard.tsx", "TypeScript JSX", 0, 159, 0, 0, 0, 0, 0, 0, 0, 4, 14, 177
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/[id].tsx", "TypeScript JSX", 0, 322, 0, 0, 0, 0, 0, 0, 0, 0, 19, 341
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/all/[id].tsx", "TypeScript JSX", 0, 344, 0, 0, 0, 0, 0, 0, 0, 6, 22, 372
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/all/index.tsx", "TypeScript JSX", 0, 236, 0, 0, 0, 0, 0, 0, 0, 3, 17, 256
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/damaged/[id].tsx", "TypeScript JSX", 0, 277, 0, 0, 0, 0, 0, 0, 0, 5, 20, 302
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/damaged/index.tsx", "TypeScript JSX", 0, 177, 0, 0, 0, 0, 0, 0, 0, 2, 13, 192
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/index.tsx", "TypeScript JSX", 0, 191, 0, 0, 0, 0, 0, 0, 0, 0, 11, 202
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/partial/[id].tsx", "TypeScript JSX", 0, 296, 0, 0, 0, 0, 0, 0, 0, 6, 25, 327
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/partial/index.tsx", "TypeScript JSX", 0, 175, 0, 0, 0, 0, 0, 0, 0, 2, 13, 190
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/pending/[id].tsx", "TypeScript JSX", 0, 405, 0, 0, 0, 0, 0, 0, 0, 9, 28, 442
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/indents/pending/index.tsx", "TypeScript JSX", 0, 267, 0, 0, 0, 0, 0, 0, 0, 4, 19, 290
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/reports.tsx", "TypeScript JSX", 0, 46, 0, 0, 0, 0, 0, 0, 0, 0, 4, 50
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/index.tsx", "TypeScript JSX", 0, 101, 0, 0, 0, 0, 0, 0, 0, 0, 11, 112
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/materials/[id].tsx", "TypeScript JSX", 0, 312, 0, 0, 0, 0, 0, 0, 0, 12, 20, 344
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/materials/add.tsx", "TypeScript JSX", 0, 238, 0, 0, 0, 0, 0, 0, 0, 9, 18, 265
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/materials/index.tsx", "TypeScript JSX", 0, 278, 0, 0, 0, 0, 0, 0, 0, 6, 19, 303
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/directors/[id].tsx", "TypeScript JSX", 0, 398, 0, 0, 0, 0, 0, 0, 0, 4, 20, 422
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/directors/index.tsx", "TypeScript JSX", 0, 148, 0, 0, 0, 0, 0, 0, 0, 0, 10, 158
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/engineers/[id].tsx", "TypeScript JSX", 0, 421, 0, 0, 0, 0, 0, 0, 0, 5, 21, 447
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/engineers/index.tsx", "TypeScript JSX", 0, 154, 0, 0, 0, 0, 0, 0, 0, 0, 11, 165
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/index.tsx", "TypeScript JSX", 0, 149, 0, 0, 0, 0, 0, 0, 0, 0, 14, 163
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/purchase-team/[id].tsx", "TypeScript JSX", 0, 548, 0, 0, 0, 0, 0, 0, 0, 5, 26, 579
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/roles/purchase-team/index.tsx", "TypeScript JSX", 0, 148, 0, 0, 0, 0, 0, 0, 0, 0, 10, 158
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/sites/[id].tsx", "TypeScript JSX", 0, 528, 0, 0, 0, 0, 0, 0, 0, 10, 32, 570
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/sites/add.tsx", "TypeScript JSX", 0, 408, 0, 0, 0, 0, 0, 0, 0, 17, 29, 454
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(director)/space/sites/index.tsx", "TypeScript JSX", 0, 162, 0, 0, 0, 0, 0, 0, 0, 2, 11, 175
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/_layout.tsx", "TypeScript JSX", 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 2, 34
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/account.tsx", "TypeScript JSX", 0, 378, 0, 0, 0, 0, 0, 0, 0, 9, 17, 404
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/damage-report.tsx", "TypeScript JSX", 0, 167, 0, 0, 0, 0, 0, 0, 0, 4, 14, 185
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/financial.tsx", "TypeScript JSX", 0, 176, 0, 0, 0, 0, 0, 0, 0, 6, 12, 194
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/index.tsx", "TypeScript JSX", 0, 363, 0, 0, 0, 0, 0, 0, 0, 6, 23, 392
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/materials.tsx", "TypeScript JSX", 0, 147, 0, 0, 0, 0, 0, 0, 0, 4, 10, 161
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/analytics/vendors.tsx", "TypeScript JSX", 0, 188, 0, 0, 0, 0, 0, 0, 0, 4, 13, 205
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/damages/[id].tsx", "TypeScript JSX", 0, 391, 0, 0, 0, 0, 0, 0, 0, 10, 23, 424
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/damages/index.tsx", "TypeScript JSX", 0, 326, 0, 0, 0, 0, 0, 0, 0, 3, 16, 345
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/dashboard.tsx", "TypeScript JSX", 0, 338, 0, 0, 0, 0, 0, 0, 0, 8, 19, 365
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/indents/[id].tsx", "TypeScript JSX", 0, 300, 0, 0, 0, 0, 0, 0, 0, 8, 30, 338
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/indents/index.tsx", "TypeScript JSX", 0, 273, 0, 0, 0, 0, 0, 0, 0, 2, 20, 295
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/orders/[id].tsx", "TypeScript JSX", 0, 625, 0, 0, 0, 0, 0, 0, 0, 12, 40, 677
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/orders/index.tsx", "TypeScript JSX", 0, 271, 0, 0, 0, 0, 0, 0, 0, 2, 22, 295
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/orders/select.tsx", "TypeScript JSX", 0, 256, 0, 0, 0, 0, 0, 0, 0, 2, 16, 274
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/partial/[id].tsx", "TypeScript JSX", 0, 373, 0, 0, 0, 0, 0, 0, 0, 11, 31, 415
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/partial/index.tsx", "TypeScript JSX", 0, 274, 0, 0, 0, 0, 0, 0, 0, 2, 19, 295
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/pending/[id].tsx", "TypeScript JSX", 0, 405, 0, 0, 0, 0, 0, 0, 0, 5, 27, 437
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/pending/index.tsx", "TypeScript JSX", 0, 302, 0, 0, 0, 0, 0, 0, 0, 6, 21, 329
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(purchase-team)/reports.tsx", "TypeScript JSX", 0, 46, 0, 0, 0, 0, 0, 0, 0, 0, 4, 50
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/_layout.tsx", "TypeScript JSX", 0, 38, 0, 0, 0, 0, 0, 0, 0, 0, 2, 40
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/account.tsx", "TypeScript JSX", 0, 437, 0, 0, 0, 0, 0, 0, 0, 9, 15, 461
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/damages/[id].tsx", "TypeScript JSX", 0, 578, 0, 0, 0, 0, 0, 0, 0, 11, 38, 627
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/damages/index.tsx", "TypeScript JSX", 0, 400, 0, 0, 0, 0, 0, 0, 0, 6, 16, 422
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/dashboard.tsx", "TypeScript JSX", 0, 192, 0, 0, 0, 0, 0, 0, 0, 0, 8, 200
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/indents/[id].tsx", "TypeScript JSX", 0, 754, 0, 0, 0, 0, 0, 0, 0, 13, 38, 805
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/indents/create.tsx", "TypeScript JSX", 0, 624, 0, 0, 0, 0, 0, 0, 0, 17, 37, 678
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/indents/index.tsx", "TypeScript JSX", 0, 348, 0, 0, 0, 0, 0, 0, 0, 2, 22, 372
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/receipts/[id].tsx", "TypeScript JSX", 0, 520, 0, 0, 0, 0, 0, 0, 0, 8, 33, 561
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/(site-engineer)/receipts/index.tsx", "TypeScript JSX", 0, 279, 0, 0, 0, 0, 0, 0, 0, 3, 17, 299
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/_layout.tsx", "TypeScript JSX", 0, 64, 0, 0, 0, 0, 0, 0, 0, 4, 10, 78
+"/Users/gajanan/Documents/Indense/scraps/mobile/app/index.tsx", "TypeScript JSX", 0, 38, 0, 0, 0, 0, 0, 0, 0, 1, 8, 47
+"/Users/gajanan/Documents/Indense/scraps/mobile/assets/images/icon.svg", "XML", 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1, 5
+"/Users/gajanan/Documents/Indense/scraps/mobile/babel.config.js", "JavaScript", 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 1, 7
+"/Users/gajanan/Documents/Indense/scraps/mobile/eas.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 25
+"/Users/gajanan/Documents/Indense/scraps/mobile/package-lock.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 0, 9778, 0, 1, 9779
+"/Users/gajanan/Documents/Indense/scraps/mobile/package.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 0, 43, 0, 1, 44
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/auth.api.ts", "TypeScript", 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 30
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/client.ts", "TypeScript", 82, 0, 0, 0, 0, 0, 0, 0, 0, 7, 16, 105
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/indents.api.ts", "TypeScript", 572, 0, 0, 0, 0, 0, 0, 0, 0, 53, 87, 712
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/index.ts", "TypeScript", 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 12
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/materials.api.ts", "TypeScript", 93, 0, 0, 0, 0, 0, 0, 0, 0, 24, 15, 132
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/notifications.api.ts", "TypeScript", 53, 0, 0, 0, 0, 0, 0, 0, 0, 21, 12, 86
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/sites.api.ts", "TypeScript", 110, 0, 0, 0, 0, 0, 0, 0, 0, 40, 22, 172
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/api/users.api.ts", "TypeScript", 76, 0, 0, 0, 0, 0, 0, 0, 0, 33, 17, 126
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/AddMaterialModal.tsx", "TypeScript JSX", 0, 365, 0, 0, 0, 0, 0, 0, 0, 8, 25, 398
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/ErrorBoundary.tsx", "TypeScript JSX", 0, 89, 0, 0, 0, 0, 0, 0, 0, 0, 10, 99
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/FilterModal.tsx", "TypeScript JSX", 0, 289, 0, 0, 0, 0, 0, 0, 0, 4, 15, 308
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/NotificationCenter.tsx", "TypeScript JSX", 0, 293, 0, 0, 0, 0, 0, 0, 0, 5, 20, 318
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Badge.tsx", "TypeScript JSX", 0, 30, 0, 0, 0, 0, 0, 0, 0, 0, 6, 36
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Button.tsx", "TypeScript JSX", 0, 131, 0, 0, 0, 0, 0, 0, 0, 4, 7, 142
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Card.tsx", "TypeScript JSX", 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 5, 36
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Input.tsx", "TypeScript JSX", 0, 55, 0, 0, 0, 0, 0, 0, 0, 0, 5, 60
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/Loading.tsx", "TypeScript JSX", 0, 23, 0, 0, 0, 0, 0, 0, 0, 0, 5, 28
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/components/common/index.ts", "TypeScript", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 6
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/constants/indentStatus.ts", "TypeScript", 42, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5, 51
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/constants/index.ts", "TypeScript", 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/constants/roles.ts", "TypeScript", 19, 0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 29
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/constants/theme.ts", "TypeScript", 89, 0, 0, 0, 0, 0, 0, 0, 0, 6, 8, 103
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/context/AuthContext.tsx", "TypeScript JSX", 0, 116, 0, 0, 0, 0, 0, 0, 0, 10, 20, 146
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/context/index.ts", "TypeScript", 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/services/notifications.ts", "TypeScript", 79, 0, 0, 0, 0, 0, 0, 0, 0, 30, 18, 127
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/types/auth.types.ts", "TypeScript", 21, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4, 26
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/types/indent.types.ts", "TypeScript", 261, 0, 0, 0, 0, 0, 0, 0, 0, 27, 26, 314
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/types/index.ts", "TypeScript", 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4
+"/Users/gajanan/Documents/Indense/scraps/mobile/src/utils/storage.ts", "TypeScript", 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 40
+"/Users/gajanan/Documents/Indense/scraps/mobile/tsconfig.json", "JSON with Comments", 0, 0, 0, 0, 42, 0, 0, 0, 0, 0, 1, 43
+"Total", "-", 1572, 21205, 145, 21, 42, 100, 41, 6, 9896, 774, 1763, 35565

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -9,9 +9,11 @@ import {
     Alert,
     Modal,
     TextInput,
+    RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { usersApi, User } from '../../../../../src/api/users.api';
 
 const theme = {
     colors: {
@@ -24,55 +26,45 @@ const theme = {
         accent: '#F59E0B',
         success: '#10B981',
         error: '#EF4444',
+        warning: '#F59E0B',
     }
 };
-
-interface Engineer {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    dob: string;
-    sites: { id: string; name: string }[];
-    isPromoted?: boolean;
-}
 
 export default function EngineerDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const [engineer, setEngineer] = useState<Engineer | null>(null);
+    const [engineer, setEngineer] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
     const [confirmText, setConfirmText] = useState('');
+    const [actionLoading, setActionLoading] = useState(false);
 
-    useEffect(() => {
-        fetchEngineer();
-    }, [id]);
-
-    const fetchEngineer = async () => {
+    const fetchEngineer = useCallback(async () => {
+        if (!id) return;
         try {
-            // TODO: Replace with actual API call
-            setEngineer({
-                id: id!,
-                name: 'Rajesh Kumar',
-                email: 'rajesh@example.com',
-                phone: '+91 98765 43210',
-                dob: '1990-05-15',
-                sites: [
-                    { id: '1', name: 'Green Valley Residences' },
-                    { id: '2', name: 'Skyline Towers' },
-                ],
-                isPromoted: false,
-            });
+            const data = await usersApi.getById(id);
+            setEngineer(data);
         } catch (error) {
             console.error('Failed to fetch engineer:', error);
             Alert.alert('Error', 'Failed to load engineer details');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    };
+    }, [id]);
 
-    const formatDate = (dateStr: string) => {
+    useEffect(() => {
+        fetchEngineer();
+    }, [fetchEngineer]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchEngineer();
+    }, [fetchEngineer]);
+
+    const formatDate = (dateStr: string | null | undefined) => {
+        if (!dateStr) return '-';
         return new Date(dateStr).toLocaleDateString('en-IN', {
             day: '2-digit',
             month: 'long',
@@ -80,48 +72,79 @@ export default function EngineerDetail() {
         });
     };
 
-    const handlePromote = () => {
+    const handlePromote = async () => {
+        if (!engineer) return;
         Alert.alert(
             'Promote to Purchase Team',
-            `Are you sure you want to promote ${engineer?.name} to Purchase Team?`,
+            `Are you sure you want to promote ${engineer.name} to Purchase Team?`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
                     text: 'Promote',
-                    onPress: () => {
-                        setEngineer(prev => prev ? { ...prev, isPromoted: true } : null);
-                        Alert.alert('Success', `${engineer?.name} has been promoted to Purchase Team`);
+                    onPress: async () => {
+                        setActionLoading(true);
+                        try {
+                            const updated = await usersApi.promote(engineer.id);
+                            setEngineer(updated);
+                            Alert.alert('Success', `${engineer.name} has been promoted to Purchase Team`, [
+                                { text: 'OK', onPress: () => router.back() }
+                            ]);
+                        } catch (error: any) {
+                            Alert.alert('Error', error?.message || 'Failed to promote');
+                        } finally {
+                            setActionLoading(false);
+                        }
                     }
                 }
             ]
         );
     };
 
-    const handleDemote = () => {
-        Alert.alert(
-            'Demote to Site Engineer',
-            `Are you sure you want to demote ${engineer?.name} back to Site Engineer only?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Demote',
-                    onPress: () => {
-                        setEngineer(prev => prev ? { ...prev, isPromoted: false } : null);
-                        Alert.alert('Success', `${engineer?.name} has been demoted to Site Engineer`);
-                    }
-                }
-            ]
-        );
-    };
-
-    const handleRevoke = () => {
-        if (confirmText.toLowerCase() !== engineer?.name.toLowerCase()) {
+    const handleRevoke = async () => {
+        if (!engineer) return;
+        if (confirmText.toLowerCase() !== engineer.name.toLowerCase()) {
             Alert.alert('Error', 'Please type the engineer\'s name correctly to confirm');
             return;
         }
-        Alert.alert('Success', `${engineer?.name}'s access has been revoked`, [
-            { text: 'OK', onPress: () => router.back() }
-        ]);
+        setActionLoading(true);
+        try {
+            await usersApi.revoke(engineer.id);
+            Alert.alert('Success', `${engineer.name}'s access has been revoked`, [
+                { text: 'OK', onPress: () => router.back() }
+            ]);
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to revoke access');
+        } finally {
+            setActionLoading(false);
+            setShowRevokeConfirm(false);
+            setConfirmText('');
+        }
+    };
+
+    const handleRestore = async () => {
+        if (!engineer) return;
+        Alert.alert(
+            'Restore Access',
+            `Are you sure you want to restore ${engineer.name}'s access?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Restore',
+                    onPress: async () => {
+                        setActionLoading(true);
+                        try {
+                            const updated = await usersApi.restore(engineer.id);
+                            setEngineer(updated);
+                            Alert.alert('Success', `${engineer.name}'s access has been restored`);
+                        } catch (error: any) {
+                            Alert.alert('Error', error?.message || 'Failed to restore access');
+                        } finally {
+                            setActionLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     if (loading) {
@@ -142,15 +165,29 @@ export default function EngineerDetail() {
 
     return (
         <View style={styles.container}>
-            <ScrollView style={styles.scrollView}>
+            <ScrollView 
+                style={styles.scrollView}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+            >
                 {/* Profile Card */}
                 <View style={styles.profileCard}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{engineer.name.charAt(0)}</Text>
+                    <View style={[styles.avatar, engineer.isRevoked && styles.revokedAvatar]}>
+                        <Text style={[styles.avatarText, engineer.isRevoked && styles.revokedAvatarText]}>
+                            {engineer.name.charAt(0)}
+                        </Text>
                     </View>
                     <Text style={styles.name}>{engineer.name}</Text>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>Site Engineer</Text>
+                    <View style={styles.badgeRow}>
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>Site Engineer</Text>
+                        </View>
+                        {engineer.isRevoked && (
+                            <View style={styles.revokedBadge}>
+                                <Text style={styles.revokedBadgeText}>Revoked</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 
@@ -164,11 +201,15 @@ export default function EngineerDetail() {
                         </View>
                         <View style={styles.infoRow}>
                             <Text style={styles.infoLabel}>Phone</Text>
-                            <Text style={styles.infoValue}>{engineer.phone}</Text>
+                            <Text style={styles.infoValue}>{engineer.phone || '-'}</Text>
                         </View>
                         <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>Date of Birth</Text>
-                            <Text style={styles.infoValue}>{formatDate(engineer.dob)}</Text>
+                            <Text style={styles.infoLabel}>Joined</Text>
+                            <Text style={styles.infoValue}>{formatDate(engineer.createdAt)}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Last Login</Text>
+                            <Text style={styles.infoValue}>{formatDate(engineer.lastLoginAt)}</Text>
                         </View>
                     </View>
                 </View>
@@ -191,22 +232,36 @@ export default function EngineerDetail() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Actions</Text>
 
-                    {!engineer.isPromoted ? (
-                        <TouchableOpacity style={styles.promoteButton} onPress={handlePromote}>
-                            <Ionicons name="arrow-up-circle" size={22} color={theme.colors.success} />
-                            <Text style={styles.promoteButtonText}>Promote to Purchase Team</Text>
+                    {engineer.isRevoked ? (
+                        <TouchableOpacity style={styles.restoreButton} onPress={handleRestore} disabled={actionLoading}>
+                            {actionLoading ? (
+                                <ActivityIndicator size="small" color={theme.colors.success} />
+                            ) : (
+                                <>
+                                    <Ionicons name="refresh-circle" size={22} color={theme.colors.success} />
+                                    <Text style={styles.restoreButtonText}>Restore Access</Text>
+                                </>
+                            )}
                         </TouchableOpacity>
                     ) : (
-                        <TouchableOpacity style={styles.demoteButton} onPress={handleDemote}>
-                            <Ionicons name="arrow-down-circle" size={22} color={theme.colors.textSecondary} />
-                            <Text style={styles.demoteButtonText}>Demote to Site Engineer</Text>
-                        </TouchableOpacity>
-                    )}
+                        <>
+                            <TouchableOpacity style={styles.promoteButton} onPress={handlePromote} disabled={actionLoading}>
+                                {actionLoading ? (
+                                    <ActivityIndicator size="small" color={theme.colors.success} />
+                                ) : (
+                                    <>
+                                        <Ionicons name="arrow-up-circle" size={22} color={theme.colors.success} />
+                                        <Text style={styles.promoteButtonText}>Promote to Purchase Team</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.revokeButton} onPress={() => setShowRevokeConfirm(true)}>
-                        <Ionicons name="ban" size={22} color={theme.colors.error} />
-                        <Text style={styles.revokeButtonText}>Revoke Engineer</Text>
-                    </TouchableOpacity>
+                            <TouchableOpacity style={styles.revokeButton} onPress={() => setShowRevokeConfirm(true)} disabled={actionLoading}>
+                                <Ionicons name="ban" size={22} color={theme.colors.error} />
+                                <Text style={styles.revokeButtonText}>Revoke Engineer</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
                 </View>
 
                 <View style={{ height: 40 }} />
@@ -234,8 +289,16 @@ export default function EngineerDetail() {
                             <TouchableOpacity style={styles.confirmCancel} onPress={() => { setShowRevokeConfirm(false); setConfirmText(''); }}>
                                 <Text style={styles.confirmCancelText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.confirmRevoke} onPress={handleRevoke}>
-                                <Text style={styles.confirmRevokeText}>Revoke</Text>
+                            <TouchableOpacity 
+                                style={styles.confirmRevoke} 
+                                onPress={handleRevoke}
+                                disabled={actionLoading}
+                            >
+                                {actionLoading ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.confirmRevokeText}>Revoke</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -265,16 +328,27 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 12,
     },
+    revokedAvatar: {
+        backgroundColor: theme.colors.error + '20',
+    },
     avatarText: { fontSize: 32, fontWeight: '700', color: theme.colors.accent },
+    revokedAvatarText: { color: theme.colors.error },
     name: { fontSize: 24, fontWeight: '700', color: theme.colors.textPrimary },
+    badgeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
     badge: {
         backgroundColor: theme.colors.accent + '15',
         paddingHorizontal: 14,
         paddingVertical: 6,
         borderRadius: 12,
-        marginTop: 8,
     },
     badgeText: { fontSize: 13, fontWeight: '600', color: theme.colors.accent },
+    revokedBadge: {
+        backgroundColor: theme.colors.error + '15',
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    revokedBadgeText: { fontSize: 13, fontWeight: '600', color: theme.colors.error },
     section: { padding: 16 },
     sectionTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 12, textTransform: 'uppercase' },
     infoCard: {
@@ -313,17 +387,17 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     promoteButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.success },
-    demoteButton: {
+    restoreButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: theme.colors.border,
+        backgroundColor: theme.colors.success + '15',
         padding: 16,
         borderRadius: 12,
         marginBottom: 12,
         gap: 10,
     },
-    demoteButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.textSecondary },
+    restoreButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.success },
     revokeButton: {
         flexDirection: 'row',
         alignItems: 'center',

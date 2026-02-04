@@ -8,10 +8,13 @@ import {
     RefreshControl,
     ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { indentsApi } from '../../../../src/api/indents.api';
+import { sitesApi, Site } from '../../../../src/api/sites.api';
+import { Indent } from '../../../../src/types';
 
 const theme = {
     colors: {
@@ -27,18 +30,9 @@ const theme = {
     }
 };
 
-interface PendingIndent {
-    id: string;
-    name: string;
-    siteName: string;
-    siteEngineer: string;
-    createdAt: string;
-    hasUrgent: boolean;
-    status: 'PENDING' | 'PT_APPROVED' | 'ON_HOLD';
-}
-
 export default function PendingIndentsList() {
-    const [indents, setIndents] = useState<PendingIndent[]>([]);
+    const [indents, setIndents] = useState<Indent[]>([]);
+    const [sites, setSites] = useState<Site[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [siteFilter, setSiteFilter] = useState('all');
@@ -46,105 +40,123 @@ export default function PendingIndentsList() {
     const [dateFilter, setDateFilter] = useState<Date | null>(null);
     const router = useRouter();
 
-    const sites = ['all', 'Green Valley', 'Skyline Towers', 'Riverside'];
+    // Load sites for filter dropdown
+    useEffect(() => {
+        const loadSites = async () => {
+            try {
+                const response = await sitesApi.getAll({ limit: 100 });
+                setSites(response.data);
+            } catch (error) {
+                console.error('Failed to fetch sites:', error);
+            }
+        };
+        loadSites();
+    }, []);
 
     const fetchIndents = useCallback(async () => {
         try {
-            // TODO: Replace with actual API call
-            const mockData: PendingIndent[] = [
-                { id: '1', name: 'Steel & Cement Order', siteName: 'Green Valley', siteEngineer: 'Rajesh Kumar', createdAt: '2024-02-01', hasUrgent: true, status: 'PT_APPROVED' },
-                { id: '2', name: 'Electrical Wiring', siteName: 'Skyline Towers', siteEngineer: 'Priya Sharma', createdAt: '2024-01-30', hasUrgent: false, status: 'PT_APPROVED' },
-                { id: '3', name: 'Plumbing Materials', siteName: 'Riverside', siteEngineer: 'Amit Patel', createdAt: '2024-01-28', hasUrgent: true, status: 'PENDING' },
-                { id: '4', name: 'Finishing Work', siteName: 'Green Valley', siteEngineer: 'Rajesh Kumar', createdAt: '2024-01-25', hasUrgent: false, status: 'ON_HOLD' },
-            ];
-            // Sort by recents and urgency
-            mockData.sort((a, b) => {
-                if (a.hasUrgent !== b.hasUrgent) return a.hasUrgent ? -1 : 1;
+            // Director sees PT_APPROVED (awaiting director approval) and ON_HOLD indents
+            const response = await indentsApi.getAll({
+                status: ['PT_APPROVED', 'ON_HOLD'],
+                siteId: siteFilter !== 'all' ? siteFilter : undefined,
+                fromDate: dateFilter ? dateFilter.toISOString().split('T')[0] : undefined,
+                limit: 50,
+            });
+
+            // Sort by urgency (items with urgent materials first), then by date
+            const sortedData = [...response.data].sort((a, b) => {
+                const aHasUrgent = a.items?.some(item => item.isUrgent) || false;
+                const bHasUrgent = b.items?.some(item => item.isUrgent) || false;
+                if (aHasUrgent !== bHasUrgent) return aHasUrgent ? -1 : 1;
                 return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             });
-            setIndents(mockData);
+            setIndents(sortedData);
         } catch (error) {
             console.error('Failed to fetch indents:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [siteFilter, dateFilter]);
 
-    useEffect(() => {
-        fetchIndents();
-    }, [fetchIndents]);
+    // Refresh on focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchIndents();
+        }, [fetchIndents])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
         fetchIndents();
     };
 
-    const filteredIndents = indents.filter(indent => {
-        if (siteFilter !== 'all' && indent.siteName !== siteFilter) return false;
-        if (dateFilter) {
-            const indentDate = new Date(indent.createdAt);
-            if (indentDate < dateFilter) return false;
-        }
-        return true;
-    });
-
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     };
 
-    const getStatusColor = (status: string) => {
+    const getStatusColor = (status: string, isOnHold?: boolean) => {
+        if (isOnHold) return theme.colors.warning;
         switch (status) {
             case 'PT_APPROVED': return theme.colors.success;
-            case 'ON_HOLD': return theme.colors.warning;
+            case 'DIRECTOR_APPROVED': return theme.colors.success;
             default: return theme.colors.textSecondary;
         }
     };
 
-    const getStatusLabel = (status: string) => {
+    const getStatusLabel = (status: string, isOnHold?: boolean) => {
+        if (isOnHold) return 'On Hold';
         switch (status) {
             case 'PT_APPROVED': return 'PT Approved';
-            case 'ON_HOLD': return 'On Hold';
+            case 'DIRECTOR_APPROVED': return 'Approved';
             default: return 'Pending';
         }
     };
 
-    const renderIndent = ({ item }: { item: PendingIndent }) => (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/(director)/indents/pending/${item.id}` as any)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.cardHeader}>
-                <Text style={styles.indentName}>{item.name}</Text>
-                {item.hasUrgent && (
-                    <View style={styles.urgentBadge}>
-                        <Text style={styles.urgentText}>URGENT</Text>
+    const renderIndent = ({ item }: { item: Indent }) => {
+        const hasUrgent = item.items?.some(i => i.isUrgent) || false;
+        const siteName = item.site?.name || 'Unknown Site';
+        const engineerName = item.createdBy?.name || 'Unknown';
+
+        return (
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() => router.push(`/(director)/indents/${item.id}` as any)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.cardHeader}>
+                    <Text style={styles.indentName}>{item.name}</Text>
+                    {hasUrgent && (
+                        <View style={styles.urgentBadge}>
+                            <Text style={styles.urgentText}>URGENT</Text>
+                        </View>
+                    )}
+                </View>
+                <View style={styles.cardBody}>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="person-outline" size={14} color={theme.colors.textSecondary} />
+                        <Text style={styles.infoText}>{engineerName}</Text>
                     </View>
-                )}
-            </View>
-            <View style={styles.cardBody}>
-                <View style={styles.infoRow}>
-                    <Ionicons name="person-outline" size={14} color={theme.colors.textSecondary} />
-                    <Text style={styles.infoText}>{item.siteEngineer}</Text>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="business-outline" size={14} color={theme.colors.textSecondary} />
+                        <Text style={styles.infoText}>{siteName}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
+                        <Text style={styles.infoText}>{formatDate(item.createdAt)}</Text>
+                    </View>
                 </View>
-                <View style={styles.infoRow}>
-                    <Ionicons name="business-outline" size={14} color={theme.colors.textSecondary} />
-                    <Text style={styles.infoText}>{item.siteName}</Text>
+                <View style={styles.cardFooter}>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, item.isOnHold) + '15' }]}>
+                        <Text style={[styles.statusText, { color: getStatusColor(item.status, item.isOnHold) }]}>
+                            {getStatusLabel(item.status, item.isOnHold)}
+                        </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                 </View>
-                <View style={styles.infoRow}>
-                    <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
-                    <Text style={styles.infoText}>{formatDate(item.createdAt)}</Text>
-                </View>
-            </View>
-            <View style={styles.cardFooter}>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '15' }]}>
-                    <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{getStatusLabel(item.status)}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     if (loading && !refreshing) {
         return (
@@ -186,15 +198,16 @@ export default function PendingIndentsList() {
                         onValueChange={setSiteFilter}
                         style={styles.picker}
                     >
+                        <Picker.Item label="All Sites" value="all" />
                         {sites.map(site => (
-                            <Picker.Item key={site} label={site === 'all' ? 'All Sites' : site} value={site} />
+                            <Picker.Item key={site.id} label={site.name} value={site.id} />
                         ))}
                     </Picker>
                 </View>
             </View>
 
             <FlatList
-                data={filteredIndents}
+                data={indents}
                 keyExtractor={item => item.id}
                 renderItem={renderIndent}
                 contentContainerStyle={styles.list}

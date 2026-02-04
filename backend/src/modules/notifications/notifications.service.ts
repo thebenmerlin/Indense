@@ -3,7 +3,7 @@ import { prisma } from '../../config/database';
 import { NotificationData, notificationTemplates, getDeepLinkScreen } from './notifications.types';
 import { PaginatedResult } from '../../types';
 import { parsePaginationParams, buildPaginatedResult } from '../../utils/pagination';
-import { sendPushNotification, sendPushNotifications, buildNotificationData } from '../../utils/pushNotifications';
+import { sendPushNotification, buildNotificationData } from '../../utils/pushNotifications';
 
 class NotificationsService {
     /**
@@ -64,14 +64,26 @@ class NotificationsService {
         // Fetch push tokens for users
         const users = await prisma.user.findMany({
             where: { id: { in: userIds }, pushToken: { not: null } },
-            select: { pushToken: true },
+            select: { pushToken: true, role: true },
         });
 
-        const tokens = users.map(u => u.pushToken).filter((t): t is string => !!t);
+        for (const user of users) {
+            if (!user.pushToken) continue;
 
-        if (tokens.length > 0) {
-            const deepLinkData = buildNotificationData(type, indentId);
-            await sendPushNotifications(tokens, template.title, customMessage || template.message, deepLinkData);
+            const deepLinkData = buildNotificationData(
+                type,
+                indentId,
+                {
+                    screen: getDeepLinkScreen(type, user.role),
+                }
+            );
+
+            await sendPushNotification(
+                user.pushToken,
+                template.title,
+                customMessage || template.message,
+                deepLinkData,
+            );
         }
     }
 

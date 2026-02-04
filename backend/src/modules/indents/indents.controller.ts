@@ -109,6 +109,85 @@ class IndentsController {
             next(error);
         }
     }
+
+    async getPendingCount(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const siteId = req.query.siteId as string | undefined;
+            const count = await indentsService.getPendingCount(siteId);
+            res.json({ success: true, data: { count } });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const siteId = req.query.siteId as string | undefined;
+            const stats = await indentsService.getStats(siteId);
+            res.json({ success: true, data: stats });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async updateArrivalStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            if (!req.user!.siteId) {
+                throw new ForbiddenError('Site Engineers only');
+            }
+
+            const item = await indentsService.updateArrivalStatus(
+                req.params.id,
+                req.params.itemId,
+                req.user!.id,
+                req.user!.siteId,
+                req.body.arrivalStatus,
+                req.body.arrivalNotes
+            );
+            res.json({ success: true, data: item });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async closeByEngineer(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            if (!req.user!.siteId) {
+                throw new ForbiddenError('Site Engineers only');
+            }
+
+            const indent = await indentsService.closeByEngineer(
+                req.params.id,
+                req.user!.id,
+                req.user!.siteId
+            );
+            res.json({ success: true, data: indent });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async putOnHold(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const indent = await indentsService.putOnHold(
+                req.params.id,
+                req.user!.id,
+                req.body.reason
+            );
+            res.json({ success: true, data: indent, message: 'Indent put on hold' });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async releaseFromHold(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const indent = await indentsService.releaseFromHold(req.params.id, req.user!.id);
+            res.json({ success: true, data: indent, message: 'Indent released from hold' });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export const indentsController = new IndentsController();

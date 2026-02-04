@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -10,9 +10,12 @@ import {
     Modal,
     TextInput,
     FlatList,
+    RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { sitesApi, SiteDetail as SiteDetailType } from '../../../../src/api/sites.api';
+import { usersApi, UserResponse } from '../../../../src/api/users.api';
 
 const theme = {
     colors: {
@@ -35,71 +38,74 @@ interface SiteEngineer {
     email: string;
 }
 
-interface Site {
-    id: string;
-    name: string;
-    code: string;
-    address: string | null;
-    city: string | null;
-    state: string | null;
-    startDate?: string;
-    expectedHandover?: string;
-    indentCount?: number;
-    engineers?: SiteEngineer[];
-}
-
 export default function SiteDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const [site, setSite] = useState<Site | null>(null);
+    const [site, setSite] = useState<SiteDetailType | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showCloseConfirm, setShowCloseConfirm] = useState(false);
     const [confirmText, setConfirmText] = useState('');
     const [engineers, setEngineers] = useState<SiteEngineer[]>([]);
+    const [originalEngineers, setOriginalEngineers] = useState<SiteEngineer[]>([]);
     const [availableEngineers, setAvailableEngineers] = useState<SiteEngineer[]>([]);
     const [showAddEngineer, setShowAddEngineer] = useState(false);
+    const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        fetchSite();
-    }, [id]);
-
-    const fetchSite = async () => {
+    const fetchSite = useCallback(async () => {
+        if (!id) return;
         try {
-            // TODO: Replace with actual API call
-            // Mock data
-            const mockSite: Site = {
-                id: id!,
-                name: 'Green Valley Residences',
-                code: 'GVR',
-                address: '123 Main Street',
-                city: 'Mumbai',
-                state: 'Maharashtra',
-                startDate: '2024-01-15',
-                expectedHandover: '2025-06-30',
-                indentCount: 12,
-                engineers: [
-                    { id: '1', name: 'Rajesh Kumar', email: 'rajesh@example.com' },
-                    { id: '2', name: 'Priya Sharma', email: 'priya@example.com' },
-                ],
-            };
-            setSite(mockSite);
-            setEngineers(mockSite.engineers || []);
-            setAvailableEngineers([
-                { id: '3', name: 'Amit Patel', email: 'amit@example.com' },
-                { id: '4', name: 'Sneha Reddy', email: 'sneha@example.com' },
-            ]);
+            const data = await sitesApi.getDetails(id);
+            setSite(data);
+            const engineerList = data.engineers?.map(e => ({
+                id: e.id,
+                name: e.name,
+                email: e.email
+            })) || [];
+            setEngineers(engineerList);
+            setOriginalEngineers(engineerList);
         } catch (error) {
             console.error('Failed to fetch site:', error);
             Alert.alert('Error', 'Failed to load site details');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    };
+    }, [id]);
 
-    const formatDate = (dateStr: string | undefined) => {
+    const fetchAvailableEngineers = useCallback(async () => {
+        if (!id) return;
+        try {
+            const data = await sitesApi.getAvailableEngineers(id);
+            setAvailableEngineers(data.map(e => ({
+                id: e.id,
+                name: e.name,
+                email: e.email
+            })));
+        } catch (error) {
+            console.error('Failed to fetch available engineers:', error);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        fetchSite();
+    }, [fetchSite]);
+
+    useEffect(() => {
+        if (editMode) {
+            fetchAvailableEngineers();
+        }
+    }, [editMode, fetchAvailableEngineers]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchSite();
+    }, [fetchSite]);
+
+    const formatDate = (dateStr: string | null | undefined) => {
         if (!dateStr) return '-';
         return new Date(dateStr).toLocaleDateString('en-IN', {
             day: '2-digit',
@@ -108,39 +114,75 @@ export default function SiteDetail() {
         });
     };
 
-    const handleRemoveEngineer = (engineerId: string) => {
+    const handleRemoveEngineer = async (engineerId: string) => {
+        if (!id) return;
+        // Optimistically update UI
+        const removed = engineers.find(e => e.id === engineerId);
         setEngineers(prev => prev.filter(e => e.id !== engineerId));
+        if (removed) {
+            setAvailableEngineers(prev => [...prev, removed]);
+        }
     };
 
-    const handleAddEngineer = (engineer: SiteEngineer) => {
+    const handleAddEngineer = async (engineer: SiteEngineer) => {
         setEngineers(prev => [...prev, engineer]);
         setAvailableEngineers(prev => prev.filter(e => e.id !== engineer.id));
         setShowAddEngineer(false);
     };
 
-    const handleSaveEngineers = () => {
-        Alert.alert('Success', 'Site engineers updated successfully');
+    const handleSaveEngineers = async () => {
+        if (!id) return;
+        setSaving(true);
+        try {
+            const engineerIds = engineers.map(e => e.id);
+            await sitesApi.assignEngineers(id, engineerIds);
+            setOriginalEngineers(engineers);
+            setEditMode(false);
+            Alert.alert('Success', 'Site engineers updated successfully');
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to update engineers');
+            // Revert to original
+            setEngineers(originalEngineers);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
         setEditMode(false);
+        setEngineers(originalEngineers);
     };
 
-    const handleDeleteSite = () => {
-        if (confirmText.toLowerCase() !== site?.city?.toLowerCase()) {
+    const handleDeleteSite = async () => {
+        if (!id || !site) return;
+        if (confirmText.toLowerCase() !== site.city?.toLowerCase()) {
             Alert.alert('Error', 'Please type the site location correctly to confirm');
             return;
         }
-        Alert.alert('Deleted', 'Site has been deleted', [
-            { text: 'OK', onPress: () => router.back() }
-        ]);
+        try {
+            await sitesApi.deleteSite(id);
+            Alert.alert('Deleted', 'Site has been deleted', [
+                { text: 'OK', onPress: () => router.back() }
+            ]);
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to delete site');
+        }
     };
 
-    const handleCloseSite = () => {
-        if (confirmText.toLowerCase() !== site?.city?.toLowerCase()) {
+    const handleCloseSite = async () => {
+        if (!id || !site) return;
+        if (confirmText.toLowerCase() !== site.city?.toLowerCase()) {
             Alert.alert('Error', 'Please type the site location correctly to confirm');
             return;
         }
-        Alert.alert('Closed', 'Site has been closed', [
-            { text: 'OK', onPress: () => router.back() }
-        ]);
+        try {
+            await sitesApi.closeSite(id);
+            Alert.alert('Closed', 'Site has been closed', [
+                { text: 'OK', onPress: () => router.back() }
+            ]);
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to close site');
+        }
     };
 
     const navigateToIndents = () => {
@@ -166,7 +208,12 @@ export default function SiteDetail() {
 
     return (
         <View style={styles.container}>
-            <ScrollView style={styles.scrollView}>
+            <ScrollView 
+                style={styles.scrollView}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+            >
                 {/* Site Info Card */}
                 <View style={styles.infoCard}>
                     <Text style={styles.siteName}>{site.name}</Text>
@@ -186,12 +233,12 @@ export default function SiteDetail() {
                         <View style={styles.infoItem}>
                             <Ionicons name="flag-outline" size={18} color={theme.colors.accent} />
                             <Text style={styles.infoLabel}>Expected Handover</Text>
-                            <Text style={styles.infoValue}>{formatDate(site.expectedHandover)}</Text>
+                            <Text style={styles.infoValue}>{formatDate(site.expectedHandoverDate)}</Text>
                         </View>
                         <TouchableOpacity style={styles.infoItem} onPress={navigateToIndents}>
                             <Ionicons name="document-text-outline" size={18} color={theme.colors.primary} />
                             <Text style={styles.infoLabel}>Indents</Text>
-                            <Text style={[styles.infoValue, styles.clickableValue]}>{site.indentCount}</Text>
+                            <Text style={[styles.infoValue, styles.clickableValue]}>{site.indentCount ?? 0}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -206,11 +253,15 @@ export default function SiteDetail() {
                             </TouchableOpacity>
                         ) : (
                             <View style={styles.editActions}>
-                                <TouchableOpacity onPress={() => { setEditMode(false); setEngineers(site.engineers || []); }} style={styles.cancelButton}>
+                                <TouchableOpacity onPress={handleCancelEdit} style={styles.cancelButton}>
                                     <Text style={styles.cancelButtonText}>Cancel</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={handleSaveEngineers} style={styles.saveButton}>
-                                    <Text style={styles.saveButtonText}>Save</Text>
+                                <TouchableOpacity onPress={handleSaveEngineers} style={styles.saveButton} disabled={saving}>
+                                    {saving ? (
+                                        <ActivityIndicator size="small" color="#FFF" />
+                                    ) : (
+                                        <Text style={styles.saveButtonText}>Save</Text>
+                                    )}
                                 </TouchableOpacity>
                             </View>
                         )}
