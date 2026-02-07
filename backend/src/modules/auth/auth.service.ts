@@ -18,6 +18,7 @@ export interface LoginResult {
         name: string;
         dob: Date | null;
         role: string;
+        allowedRoles: string[];
         currentSiteId: string | null;
         currentSiteName?: string;
         sites: Array<{ id: string; name: string; code: string }>;
@@ -126,6 +127,7 @@ class AuthService {
                 name: user.name,
                 dob: user.dob,
                 role: user.role,
+                allowedRoles: user.allowedRoles || [],
                 currentSiteId: user.currentSiteId,
                 currentSiteName: user.currentSite?.name,
                 sites: user.sites.map(us => us.site),
@@ -183,6 +185,7 @@ class AuthService {
                 name: user.name,
                 dob: user.dob,
                 role: user.role,
+                allowedRoles: user.allowedRoles || [],
                 currentSiteId: user.currentSiteId,
                 currentSiteName: user.currentSite?.name,
                 sites: user.sites.map(us => us.site),
@@ -236,6 +239,7 @@ class AuthService {
                 name: user.name,
                 dob: user.dob,
                 role: user.role,
+                allowedRoles: user.allowedRoles || [],
                 currentSiteId: user.currentSiteId,
                 currentSiteName: user.currentSite?.name,
                 sites: user.sites.map(us => us.site),
@@ -350,7 +354,61 @@ class AuthService {
         });
     }
 
+    /**
+     * Switch active role for multi-role users
+     */
+    async switchRole(userId: string, newRole: Role): Promise<{ accessToken: string; user: LoginResult['user'] }> {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
+                },
+            },
+        });
 
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        // Check if user is allowed to use this role
+        if (!user.allowedRoles.includes(newRole) && user.role !== newRole) {
+            throw new BadRequestError('You are not authorized to switch to this role');
+        }
+
+        // Update user's current role
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { role: newRole },
+            include: {
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
+                },
+            },
+        });
+
+        // Generate new access token with updated role
+        const accessToken = this.generateAccessToken(updatedUser);
+
+        return {
+            accessToken,
+            user: {
+                id: updatedUser.id,
+                email: updatedUser.email,
+                phone: updatedUser.phone,
+                name: updatedUser.name,
+                dob: updatedUser.dob,
+                role: updatedUser.role,
+                allowedRoles: updatedUser.allowedRoles || [],
+                currentSiteId: updatedUser.currentSiteId,
+                currentSiteName: updatedUser.currentSite?.name,
+                sites: updatedUser.sites.map(us => us.site),
+                theme: updatedUser.theme,
+            },
+        };
+    }
 
     /**
      * Refresh access token using refresh token

@@ -122,3 +122,8 @@ export const updateThemeValidation = [
         .withMessage('Theme must be light or dark'),
 ];
 
+export const switchRoleValidation = [
+    body('role')
+        .isIn(['SITE_ENGINEER', 'PURCHASE_TEAM', 'DIRECTOR'])
+        .withMessage('Role must be SITE_ENGINEER, PURCHASE_TEAM, or DIRECTOR'),
+];

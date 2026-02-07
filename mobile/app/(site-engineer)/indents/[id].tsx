@@ -513,6 +513,73 @@ export default function IndentDetails() {
                                     <Text style={styles.modalValue}>{selectedMaterial.notes}</Text>
                                 </View>
                             )}
+
+                            {/* Per-Material Vendor Details - Only for purchased indents */}
+                            {isPurchased && indent.order?.orderItems && (() => {
+                                const orderItem = indent.order.orderItems.find(
+                                    oi => oi.indentItemId === selectedMaterial.id
+                                );
+                                if (!orderItem?.vendorName) return null;
+                                return (
+                                    <View style={styles.vendorDetailsSection}>
+                                        <Text style={styles.vendorSectionTitle}>Vendor Details</Text>
+                                        <View style={styles.vendorDetailCard}>
+                                            <View style={styles.vendorDetailRow}>
+                                                <Ionicons name="storefront-outline" size={18} color={theme.colors.primary} />
+                                                <View style={styles.vendorDetailContent}>
+                                                    <Text style={styles.vendorDetailLabel}>Name of Vendor</Text>
+                                                    <Text style={styles.vendorDetailValue}>{orderItem.vendorName}</Text>
+                                                </View>
+                                            </View>
+                                            {orderItem.vendorAddress && (
+                                                <View style={styles.vendorDetailRow}>
+                                                    <Ionicons name="location-outline" size={18} color={theme.colors.primary} />
+                                                    <View style={styles.vendorDetailContent}>
+                                                        <Text style={styles.vendorDetailLabel}>Address</Text>
+                                                        <Text style={styles.vendorDetailValue}>{orderItem.vendorAddress}</Text>
+                                                    </View>
+                                                </View>
+                                            )}
+                                            {orderItem.vendorGstNo && (
+                                                <View style={styles.vendorDetailRow}>
+                                                    <Ionicons name="document-text-outline" size={18} color={theme.colors.primary} />
+                                                    <View style={styles.vendorDetailContent}>
+                                                        <Text style={styles.vendorDetailLabel}>GST No.</Text>
+                                                        <Text style={styles.vendorDetailValue}>{orderItem.vendorGstNo}</Text>
+                                                    </View>
+                                                </View>
+                                            )}
+                                            {orderItem.vendorContactPerson && (
+                                                <View style={styles.vendorDetailRow}>
+                                                    <Ionicons name="person-outline" size={18} color={theme.colors.primary} />
+                                                    <View style={styles.vendorDetailContent}>
+                                                        <Text style={styles.vendorDetailLabel}>Contact Person</Text>
+                                                        <Text style={styles.vendorDetailValue}>{orderItem.vendorContactPerson}</Text>
+                                                    </View>
+                                                </View>
+                                            )}
+                                            {orderItem.vendorContactPhone && (
+                                                <View style={styles.vendorDetailRow}>
+                                                    <Ionicons name="call-outline" size={18} color={theme.colors.primary} />
+                                                    <View style={styles.vendorDetailContent}>
+                                                        <Text style={styles.vendorDetailLabel}>Phone</Text>
+                                                        <Text style={styles.vendorDetailValue}>{orderItem.vendorContactPhone}</Text>
+                                                    </View>
+                                                </View>
+                                            )}
+                                            {orderItem.vendorNatureOfBusiness && (
+                                                <View style={styles.vendorDetailRow}>
+                                                    <Ionicons name="briefcase-outline" size={18} color={theme.colors.primary} />
+                                                    <View style={styles.vendorDetailContent}>
+                                                        <Text style={styles.vendorDetailLabel}>Nature of Business</Text>
+                                                        <Text style={styles.vendorDetailValue}>{orderItem.vendorNatureOfBusiness}</Text>
+                                                    </View>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </View>
+                                );
+                            })()}
                         </ScrollView>
                     )}
                 </View>
@@ -915,6 +982,42 @@ const styles = StyleSheet.create({
     modalQtyValue: {
         fontSize: 20,
         fontWeight: '700',
+        color: theme.colors.textPrimary,
+    },
+    vendorDetailsSection: {
+        marginTop: 20,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    vendorSectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.primary,
+        marginBottom: 12,
+    },
+    vendorDetailCard: {
+        backgroundColor: theme.colors.primary + '08',
+        borderRadius: 12,
+        padding: 16,
+    },
+    vendorDetailRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 14,
+    },
+    vendorDetailContent: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    vendorDetailLabel: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: 2,
+    },
+    vendorDetailValue: {
+        fontSize: 15,
+        fontWeight: '500',
         color: theme.colors.textPrimary,
     },
 });

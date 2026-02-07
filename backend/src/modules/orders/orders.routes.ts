@@ -53,7 +53,7 @@ router.post(
 
 router.patch(
     '/:id',
-    requireHeadOffice,
+    requirePurchaseTeam,
     validateRequest(updateOrderValidation),
     ordersController.update.bind(ordersController)
 );

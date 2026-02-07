@@ -8,11 +8,13 @@ import {
     RefreshControl,
     ActivityIndicator,
     Modal,
+    Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { indentsApi } from '../../../src/api';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { ordersApi } from '../../../src/api';
 import { Indent } from '../../../src/types';
 
 const theme = {
@@ -31,22 +33,33 @@ export default function SelectIndentForOrder() {
     const [indents, setIndents] = useState<Indent[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [creatingOrder, setCreatingOrder] = useState<string | null>(null);
     const [showFilters, setShowFilters] = useState(false);
+
+    // Filter state
     const [siteFilter, setSiteFilter] = useState('all');
+    const [fromDate, setFromDate] = useState<Date | null>(null);
+    const [toDate, setToDate] = useState<Date | null>(null);
+    const [showFromPicker, setShowFromPicker] = useState(false);
+    const [showToPicker, setShowToPicker] = useState(false);
+
     const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
     const router = useRouter();
 
     const fetchIndents = useCallback(async () => {
         try {
-            // Fetch DIRECTOR_APPROVED indents (ready for purchase)
-            const response = await indentsApi.getAll({ status: 'DIRECTOR_APPROVED', limit: 100 });
-            let data = response.data;
+            setLoading(true);
+            // Use orders API to get approved indents with proper filters
+            const response = await ordersApi.getApprovedIndents({
+                siteId: siteFilter !== 'all' ? siteFilter : undefined,
+                fromDate: fromDate?.toISOString(),
+                toDate: toDate?.toISOString(),
+                limit: 100,
+            });
 
-            if (siteFilter !== 'all') {
-                data = data.filter(i => i.site?.id === siteFilter);
-            }
+            setIndents(response.data);
 
-            // Extract unique sites
+            // Extract unique sites for filter
             const uniqueSites = new Map<string, string>();
             response.data.forEach(i => {
                 if (i.site?.id && i.site?.name) {
@@ -54,15 +67,14 @@ export default function SelectIndentForOrder() {
                 }
             });
             setSites(Array.from(uniqueSites, ([id, name]) => ({ id, name })));
-
-            setIndents(data);
         } catch (error) {
             console.error('Failed to fetch indents:', error);
+            Alert.alert('Error', 'Failed to load approved indents');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [siteFilter]);
+    }, [siteFilter, fromDate, toDate]);
 
     useEffect(() => {
         fetchIndents();
@@ -73,6 +85,31 @@ export default function SelectIndentForOrder() {
         fetchIndents();
     };
 
+    const handleSelectIndent = async (indent: Indent) => {
+        setCreatingOrder(indent.id);
+        try {
+            // Create order from indent
+            const order = await ordersApi.create({
+                indentId: indent.id,
+                items: (indent.items || []).map(item => ({
+                    materialName: item.material?.name || 'Unknown',
+                    materialCode: item.material?.code || '',
+                    specifications: item.material?.specifications ? JSON.stringify(item.material.specifications) : null,
+                    quantity: item.requestedQty,
+                })),
+            });
+
+            // Navigate to order detail with the new order ID
+            router.push(`/(purchase-team)/orders/${order.id}` as any);
+        } catch (error: any) {
+            console.error('Failed to create order:', error);
+            const message = error?.response?.data?.message || 'Failed to create order';
+            Alert.alert('Error', message);
+        } finally {
+            setCreatingOrder(null);
+        }
+    };
+
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-IN', {
             day: '2-digit',
@@ -81,37 +118,88 @@ export default function SelectIndentForOrder() {
         });
     };
 
-    const renderIndent = ({ item }: { item: Indent }) => (
-        <TouchableOpacity
-            onPress={() => router.push(`/(purchase-team)/orders/${item.id}` as any)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.card}>
-                <View style={styles.cardMain}>
-                    <View style={styles.cardLeft}>
-                        <Text style={styles.indentName} numberOfLines={1}>
-                            {item.name || item.indentNumber}
-                        </Text>
-                        <Text style={styles.engineerName}>
-                            <Ionicons name="person-outline" size={12} /> {item.createdBy?.name}
-                        </Text>
-                        <Text style={styles.siteName}>
-                            <Ionicons name="location-outline" size={12} /> {item.site?.name}
-                        </Text>
-                        <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
-                    </View>
-                    <View style={styles.cardRight}>
-                        <View style={styles.approvedBadge}>
-                            <Ionicons name="checkmark-done" size={14} color={theme.colors.success} />
-                            <Text style={styles.approvedText}>Approved</Text>
+    const formatFilterDate = (date: Date | null) => {
+        if (!date) return 'Select...';
+        return date.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
+    };
+
+    const handleFromDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+        setShowFromPicker(false);
+        if (selectedDate) {
+            setFromDate(selectedDate);
+        }
+    };
+
+    const handleToDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+        setShowToPicker(false);
+        if (selectedDate) {
+            setToDate(selectedDate);
+        }
+    };
+
+    const resetFilters = () => {
+        setSiteFilter('all');
+        setFromDate(null);
+        setToDate(null);
+    };
+
+    const applyFilters = () => {
+        setShowFilters(false);
+        setLoading(true);
+    };
+
+    const activeFilterCount = () => {
+        let count = 0;
+        if (siteFilter !== 'all') count++;
+        if (fromDate) count++;
+        if (toDate) count++;
+        return count;
+    };
+
+    const renderIndent = ({ item }: { item: Indent }) => {
+        const isCreating = creatingOrder === item.id;
+
+        return (
+            <TouchableOpacity
+                onPress={() => handleSelectIndent(item)}
+                activeOpacity={0.7}
+                disabled={isCreating}
+            >
+                <View style={[styles.card, isCreating && styles.cardDisabled]}>
+                    <View style={styles.cardMain}>
+                        <View style={styles.cardLeft}>
+                            <Text style={styles.indentName} numberOfLines={1}>
+                                {item.name || item.indentNumber}
+                            </Text>
+                            <Text style={styles.engineerName}>
+                                <Ionicons name="person-outline" size={12} /> {item.createdBy?.name}
+                            </Text>
+                            <Text style={styles.siteName}>
+                                <Ionicons name="location-outline" size={12} /> {item.site?.name}
+                            </Text>
+                            <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
                         </View>
-                        <Text style={styles.itemCount}>{item.items?.length || 0} items</Text>
-                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                        <View style={styles.cardRight}>
+                            <View style={styles.approvedBadge}>
+                                <Ionicons name="checkmark-done" size={14} color={theme.colors.success} />
+                                <Text style={styles.approvedText}>Approved</Text>
+                            </View>
+                            <Text style={styles.itemCount}>{item.items?.length || 0} items</Text>
+                            {isCreating ? (
+                                <ActivityIndicator size="small" color={theme.colors.primary} />
+                            ) : (
+                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                            )}
+                        </View>
                     </View>
                 </View>
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     if (loading && !refreshing) {
         return (
@@ -127,6 +215,11 @@ export default function SelectIndentForOrder() {
                 <View style={styles.filterButton}>
                     <Ionicons name="filter" size={18} color={theme.colors.primary} />
                     <Text style={styles.filterText}>Filter</Text>
+                    {activeFilterCount() > 0 && (
+                        <View style={styles.filterBadge}>
+                            <Text style={styles.filterBadgeText}>{activeFilterCount()}</Text>
+                        </View>
+                    )}
                 </View>
                 <Text style={styles.countText}>{indents.length} approved indent{indents.length !== 1 ? 's' : ''}</Text>
             </TouchableOpacity>
@@ -155,6 +248,7 @@ export default function SelectIndentForOrder() {
                         </TouchableOpacity>
                     </View>
                     <View style={styles.modalContent}>
+                        {/* Site Filter */}
                         <Text style={styles.filterLabel}>Site</Text>
                         <View style={styles.pickerContainer}>
                             <Picker
@@ -167,12 +261,46 @@ export default function SelectIndentForOrder() {
                                 ))}
                             </Picker>
                         </View>
+
+                        {/* Date Range */}
+                        <Text style={styles.filterLabel}>Date Range</Text>
+                        <View style={styles.dateRow}>
+                            <TouchableOpacity
+                                style={styles.dateButton}
+                                onPress={() => setShowFromPicker(true)}
+                            >
+                                <Text style={styles.dateLabel}>From</Text>
+                                <Text style={styles.dateValue}>{formatFilterDate(fromDate)}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.dateButton}
+                                onPress={() => setShowToPicker(true)}
+                            >
+                                <Text style={styles.dateLabel}>To</Text>
+                                <Text style={styles.dateValue}>{formatFilterDate(toDate)}</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {showFromPicker && (
+                            <DateTimePicker
+                                value={fromDate || new Date()}
+                                mode="date"
+                                onChange={handleFromDateChange}
+                            />
+                        )}
+                        {showToPicker && (
+                            <DateTimePicker
+                                value={toDate || new Date()}
+                                mode="date"
+                                onChange={handleToDateChange}
+                            />
+                        )}
                     </View>
                     <View style={styles.modalFooter}>
-                        <TouchableOpacity style={styles.resetButton} onPress={() => setSiteFilter('all')}>
+                        <TouchableOpacity style={styles.resetButton} onPress={resetFilters}>
                             <Text style={styles.resetButtonText}>Reset</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.applyButton} onPress={() => { setShowFilters(false); setLoading(true); }}>
+                        <TouchableOpacity style={styles.applyButton} onPress={applyFilters}>
                             <Text style={styles.applyButtonText}>Apply</Text>
                         </TouchableOpacity>
                     </View>
@@ -204,6 +332,16 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     filterText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
+    filterBadge: {
+        backgroundColor: theme.colors.primary,
+        borderRadius: 10,
+        width: 18,
+        height: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 4,
+    },
+    filterBadgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
     countText: { fontSize: 14, color: theme.colors.textSecondary },
     list: { padding: 16 },
     card: {
@@ -217,6 +355,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
     },
+    cardDisabled: { opacity: 0.6 },
     cardMain: { flexDirection: 'row', justifyContent: 'space-between' },
     cardLeft: { flex: 1 },
     cardRight: { alignItems: 'flex-end' },
@@ -258,6 +397,20 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
+    dateRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    dateButton: {
+        flex: 1,
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        padding: 12,
+    },
+    dateLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 },
+    dateValue: { fontSize: 15, fontWeight: '500', color: theme.colors.textPrimary },
     modalFooter: {
         flexDirection: 'row',
         padding: 16,

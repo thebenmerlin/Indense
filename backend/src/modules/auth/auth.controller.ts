@@ -234,6 +234,26 @@ class AuthController {
     }
 
     /**
+     * POST /api/v1/auth/switch-role
+     * Switch active role for multi-role users
+     */
+    async switchRole(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const userId = req.user!.id;
+            const { role } = req.body;
+
+            const result = await authService.switchRole(userId, role);
+
+            res.json({
+                success: true,
+                data: result,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
      * GET /api/v1/auth/me
      * Get current user profile
      */

@@ -2,7 +2,7 @@ import { body, param } from 'express-validator';
 
 export const createOrderValidation = [
     body('indentId').isUUID().withMessage('Indent ID must be a valid UUID'),
-    body('vendorName').isString().trim().notEmpty().withMessage('Vendor name is required'),
+    body('vendorName').optional().isString().trim(),
     body('vendorContact').optional().isString(),
     body('vendorEmail').optional().isEmail(),
     body('vendorAddress').optional().isString(),

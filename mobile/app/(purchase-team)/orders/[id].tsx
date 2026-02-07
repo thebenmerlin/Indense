@@ -9,14 +9,14 @@ import {
     Alert,
     TextInput,
     Modal,
-    Image,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { ordersApi } from '../../../src/api';
-import { Order, OrderItem, OrderInvoice, OrderItemInvoice } from '../../../src/types';
+import { Order, OrderItem } from '../../../src/types';
 
 const theme = {
     colors: {
@@ -28,22 +28,19 @@ const theme = {
         border: '#D1D5DB',
         success: '#10B981',
         error: '#EF4444',
+        warning: '#F59E0B',
     }
 };
 
-interface VendorDetails {
+interface ItemFormData {
     vendorName: string;
     vendorAddress: string;
     vendorGstNo: string;
-    vendorContact: string;
     vendorContactPerson: string;
+    vendorContactPhone: string;
     vendorNatureOfBusiness: string;
-}
-
-interface MaterialCost {
     rate: string;
     quantity: string;
-    total: number;
 }
 
 export default function ProcessOrder() {
@@ -53,23 +50,20 @@ export default function ProcessOrder() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // Vendor Details State
-    const [vendor, setVendor] = useState<VendorDetails>({
-        vendorName: '',
-        vendorAddress: '',
-        vendorGstNo: '',
-        vendorContact: '',
-        vendorContactPerson: '',
-        vendorNatureOfBusiness: '',
-    });
-
     // Material Modal State
     const [showMaterialModal, setShowMaterialModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
-    const [materialCost, setMaterialCost] = useState<MaterialCost>({ rate: '', quantity: '', total: 0 });
+    const [itemForm, setItemForm] = useState<ItemFormData>({
+        vendorName: '',
+        vendorAddress: '',
+        vendorGstNo: '',
+        vendorContactPerson: '',
+        vendorContactPhone: '',
+        vendorNatureOfBusiness: '',
+        rate: '',
+        quantity: '',
+    });
     const [savingItem, setSavingItem] = useState(false);
-
-    // Invoice Upload State
     const [uploadingInvoice, setUploadingInvoice] = useState(false);
 
     useEffect(() => {
@@ -80,15 +74,6 @@ export default function ProcessOrder() {
         try {
             const data = await ordersApi.getById(id!);
             setOrder(data);
-            // Populate vendor details from existing order
-            setVendor({
-                vendorName: data.vendorName || '',
-                vendorAddress: data.vendorAddress || '',
-                vendorGstNo: data.vendorGstNo || '',
-                vendorContact: data.vendorContact || '',
-                vendorContactPerson: data.vendorContactPerson || '',
-                vendorNatureOfBusiness: data.vendorNatureOfBusiness || '',
-            });
         } catch (error) {
             console.error('Failed to fetch order:', error);
             Alert.alert('Error', 'Failed to load order');
@@ -112,58 +97,48 @@ export default function ProcessOrder() {
 
     const openMaterialModal = (item: OrderItem) => {
         setSelectedItem(item);
-        setMaterialCost({ 
-            rate: item.unitPrice?.toString() || '', 
-            quantity: item.quantity?.toString() || '', 
-            total: item.totalPrice || 0 
+        setItemForm({
+            vendorName: item.vendorName || '',
+            vendorAddress: item.vendorAddress || '',
+            vendorGstNo: item.vendorGstNo || '',
+            vendorContactPerson: item.vendorContactPerson || '',
+            vendorContactPhone: item.vendorContactPhone || '',
+            vendorNatureOfBusiness: item.vendorNatureOfBusiness || '',
+            rate: item.unitPrice?.toString() || '',
+            quantity: item.quantity?.toString() || '',
         });
         setShowMaterialModal(true);
     };
 
     const calculateTotal = () => {
-        const rate = parseFloat(materialCost.rate) || 0;
-        const qty = parseFloat(materialCost.quantity) || 0;
-        setMaterialCost(prev => ({ ...prev, total: rate * qty }));
+        const rate = parseFloat(itemForm.rate) || 0;
+        const qty = parseFloat(itemForm.quantity) || 0;
+        return rate * qty;
     };
 
-    const handleSaveItemCost = async () => {
+    const handleSaveItem = async () => {
         if (!selectedItem) return;
 
         setSavingItem(true);
         try {
             await ordersApi.updateOrderItem(id!, selectedItem.id, {
-                unitPrice: parseFloat(materialCost.rate) || 0,
-                quantity: parseFloat(materialCost.quantity) || selectedItem.quantity,
+                vendorName: itemForm.vendorName || undefined,
+                vendorAddress: itemForm.vendorAddress || undefined,
+                vendorGstNo: itemForm.vendorGstNo || undefined,
+                vendorContactPerson: itemForm.vendorContactPerson || undefined,
+                vendorContactPhone: itemForm.vendorContactPhone || undefined,
+                vendorNatureOfBusiness: itemForm.vendorNatureOfBusiness || undefined,
+                unitPrice: parseFloat(itemForm.rate) || 0,
+                quantity: parseFloat(itemForm.quantity) || selectedItem.quantity,
             });
-            await fetchOrder(); // Refresh order data
+            await fetchOrder();
             setShowMaterialModal(false);
-            Alert.alert('Saved', 'Material cost updated');
+            Alert.alert('Saved', 'Material details saved');
         } catch (error) {
-            console.error('Failed to update item:', error);
-            Alert.alert('Error', 'Failed to update material cost');
+            console.error('Failed to save item:', error);
+            Alert.alert('Error', 'Failed to save material details');
         } finally {
             setSavingItem(false);
-        }
-    };
-
-    const handleUploadOrderInvoice = async () => {
-        const result = await DocumentPicker.getDocumentAsync({
-            type: ['image/*', 'application/pdf'],
-        });
-
-        if (result.canceled || !result.assets?.[0]) return;
-
-        setUploadingInvoice(true);
-        try {
-            const file = result.assets[0];
-            await ordersApi.uploadOrderInvoice(id!, file.uri, file.name);
-            await fetchOrder();
-            Alert.alert('Success', 'Invoice uploaded');
-        } catch (error) {
-            console.error('Failed to upload invoice:', error);
-            Alert.alert('Error', 'Failed to upload invoice');
-        } finally {
-            setUploadingInvoice(false);
         }
     };
 
@@ -176,38 +151,32 @@ export default function ProcessOrder() {
 
         if (result.canceled || !result.assets?.[0]) return;
 
+        setUploadingInvoice(true);
         try {
             const file = result.assets[0];
             await ordersApi.uploadOrderItemInvoice(id!, selectedItem.id, file.uri, file.name);
             await fetchOrder();
-            Alert.alert('Success', 'Item invoice uploaded');
+            // Update selectedItem with new invoices
+            const updatedOrder = await ordersApi.getById(id!);
+            const updatedItem = updatedOrder.orderItems?.find(i => i.id === selectedItem.id);
+            if (updatedItem) setSelectedItem(updatedItem);
+            Alert.alert('Success', 'Invoice uploaded');
         } catch (error) {
-            console.error('Failed to upload item invoice:', error);
+            console.error('Failed to upload invoice:', error);
             Alert.alert('Error', 'Failed to upload invoice');
-        }
-    };
-
-    const handleSaveVendorDetails = async () => {
-        if (!vendor.vendorName.trim()) {
-            Alert.alert('Required', 'Please enter vendor name');
-            return;
-        }
-
-        setSaving(true);
-        try {
-            await ordersApi.update(id!, vendor);
-            Alert.alert('Saved', 'Vendor details updated');
-        } catch (error) {
-            console.error('Failed to save vendor details:', error);
-            Alert.alert('Error', 'Failed to save vendor details');
         } finally {
-            setSaving(false);
+            setUploadingInvoice(false);
         }
     };
 
     const handleMarkAsPurchased = async () => {
-        if (!vendor.vendorName.trim()) {
-            Alert.alert('Required', 'Please enter vendor name before marking as purchased');
+        // Check if all items have vendor details
+        const itemsWithoutVendor = order?.orderItems?.filter(item => !item.vendorName);
+        if (itemsWithoutVendor && itemsWithoutVendor.length > 0) {
+            Alert.alert(
+                'Missing Vendor Details',
+                `${itemsWithoutVendor.length} material(s) don't have vendor details. Please add vendor details for all materials before marking as purchased.`
+            );
             return;
         }
 
@@ -221,9 +190,6 @@ export default function ProcessOrder() {
                     onPress: async () => {
                         setSaving(true);
                         try {
-                            // First save vendor details
-                            await ordersApi.update(id!, vendor);
-                            // Then mark as purchased
                             await ordersApi.markAsPurchased(id!);
                             await fetchOrder();
                             Alert.alert('Success', 'Order marked as purchased!');
@@ -237,6 +203,18 @@ export default function ProcessOrder() {
                 }
             ]
         );
+    };
+
+    const getItemStatus = (item: OrderItem) => {
+        const hasVendor = !!item.vendorName;
+        const hasCost = item.unitPrice && item.unitPrice > 0;
+
+        if (hasVendor && hasCost) {
+            return { color: theme.colors.success, icon: 'checkmark-circle', label: 'Complete' };
+        } else if (hasVendor || hasCost) {
+            return { color: theme.colors.warning, icon: 'alert-circle', label: 'Partial' };
+        }
+        return { color: theme.colors.textSecondary, icon: 'ellipse-outline', label: 'Pending' };
     };
 
     if (loading) {
@@ -256,6 +234,7 @@ export default function ProcessOrder() {
     }
 
     const isPurchased = order.isPurchased;
+    const totalAmount = order.orderItems?.reduce((sum, item) => sum + (item.totalPrice || 0), 0) || 0;
 
     return (
         <View style={styles.container}>
@@ -284,137 +263,49 @@ export default function ProcessOrder() {
                     </View>
                     <View style={styles.totalRow}>
                         <Text style={styles.totalLabel}>Total Amount:</Text>
-                        <Text style={styles.totalValue}>{formatCurrency(order.totalAmount)}</Text>
+                        <Text style={styles.totalValue}>{formatCurrency(totalAmount)}</Text>
                     </View>
-                </View>
-
-                {/* Vendor Details Form */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Vendor Details</Text>
-                        {!isPurchased && (
-                            <TouchableOpacity onPress={handleSaveVendorDetails} disabled={saving}>
-                                <Text style={styles.saveLink}>{saving ? 'Saving...' : 'Save'}</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                    <View style={styles.formGroup}>
-                        <Text style={styles.label}>Vendor Name *</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Enter vendor name"
-                            value={vendor.vendorName}
-                            onChangeText={(text) => setVendor({ ...vendor, vendorName: text })}
-                            editable={!isPurchased}
-                        />
-                    </View>
-                    <View style={styles.formGroup}>
-                        <Text style={styles.label}>Address</Text>
-                        <TextInput
-                            style={[styles.input, styles.textArea]}
-                            placeholder="Enter address"
-                            value={vendor.vendorAddress}
-                            onChangeText={(text) => setVendor({ ...vendor, vendorAddress: text })}
-                            multiline
-                            editable={!isPurchased}
-                        />
-                    </View>
-                    <View style={styles.formGroup}>
-                        <Text style={styles.label}>GST No.</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="GST number"
-                            value={vendor.vendorGstNo}
-                            onChangeText={(text) => setVendor({ ...vendor, vendorGstNo: text })}
-                            editable={!isPurchased}
-                        />
-                    </View>
-                    <View style={styles.formGroup}>
-                        <Text style={styles.label}>Contact Person</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Contact person name"
-                            value={vendor.vendorContactPerson}
-                            onChangeText={(text) => setVendor({ ...vendor, vendorContactPerson: text })}
-                            editable={!isPurchased}
-                        />
-                    </View>
-                    <View style={styles.formGroup}>
-                        <Text style={styles.label}>Contact Phone</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Phone number"
-                            value={vendor.vendorContact}
-                            onChangeText={(text) => setVendor({ ...vendor, vendorContact: text })}
-                            keyboardType="phone-pad"
-                            editable={!isPurchased}
-                        />
-                    </View>
-                    <View style={styles.formGroup}>
-                        <Text style={styles.label}>Nature of Business</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="e.g., Building Materials Supplier"
-                            value={vendor.vendorNatureOfBusiness}
-                            onChangeText={(text) => setVendor({ ...vendor, vendorNatureOfBusiness: text })}
-                            editable={!isPurchased}
-                        />
-                    </View>
-                </View>
-
-                {/* Order Invoices */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Order Invoices</Text>
-                    {order.invoices?.map((invoice) => (
-                        <View key={invoice.id} style={styles.invoiceItem}>
-                            <Ionicons name="document-outline" size={20} color={theme.colors.primary} />
-                            <Text style={styles.invoiceName} numberOfLines={1}>{invoice.originalName || invoice.filename}</Text>
-                        </View>
-                    ))}
-                    {!isPurchased && (
-                        <TouchableOpacity 
-                            style={styles.addInvoiceButton} 
-                            onPress={handleUploadOrderInvoice}
-                            disabled={uploadingInvoice}
-                        >
-                            {uploadingInvoice ? (
-                                <ActivityIndicator size="small" color={theme.colors.primary} />
-                            ) : (
-                                <>
-                                    <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
-                                    <Text style={styles.addInvoiceText}>Upload Invoice</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-                    )}
                 </View>
 
                 {/* Materials List */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Materials ({order.orderItems?.length || 0})</Text>
-                    <Text style={styles.sectionSubtitle}>Tap to {isPurchased ? 'view' : 'edit'} cost and invoices</Text>
-                    {order.orderItems?.map((item) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={styles.materialCard}
-                            onPress={() => openMaterialModal(item)}
-                        >
-                            <View style={styles.materialInfo}>
-                                <Text style={styles.materialName}>{item.materialName}</Text>
-                                <Text style={styles.materialCode}>{item.materialCode}</Text>
-                                {item.unitPrice && item.unitPrice > 0 && (
-                                    <Text style={styles.materialCost}>
-                                        {formatCurrency(item.unitPrice)} × {item.quantity} = {formatCurrency(item.totalPrice)}
-                                    </Text>
-                                )}
-                            </View>
-                            <View style={styles.qtyBox}>
-                                <Text style={styles.qtyValue}>{item.quantity}</Text>
-                                <Text style={styles.qtyUnit}>{item.indentItem?.material?.unit?.code || ''}</Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-                    ))}
+                    <Text style={styles.sectionSubtitle}>
+                        Tap each material to {isPurchased ? 'view' : 'add'} vendor details, costs & invoices
+                    </Text>
+                    {order.orderItems?.map((item) => {
+                        const status = getItemStatus(item);
+                        return (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={styles.materialCard}
+                                onPress={() => openMaterialModal(item)}
+                            >
+                                <View style={styles.materialStatus}>
+                                    <Ionicons name={status.icon as any} size={20} color={status.color} />
+                                </View>
+                                <View style={styles.materialInfo}>
+                                    <Text style={styles.materialName}>{item.materialName}</Text>
+                                    <Text style={styles.materialCode}>{item.materialCode}</Text>
+                                    {item.vendorName && (
+                                        <Text style={styles.vendorPreview}>
+                                            <Ionicons name="storefront-outline" size={12} /> {item.vendorName}
+                                        </Text>
+                                    )}
+                                    {item.unitPrice && item.unitPrice > 0 && (
+                                        <Text style={styles.materialCost}>
+                                            {formatCurrency(item.unitPrice)} × {item.quantity} = {formatCurrency(item.totalPrice)}
+                                        </Text>
+                                    )}
+                                </View>
+                                <View style={styles.qtyBox}>
+                                    <Text style={styles.qtyValue}>{item.quantity}</Text>
+                                    <Text style={styles.qtyUnit}>{item.indentItem?.material?.unit?.code || ''}</Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
 
                 <View style={{ height: 120 }} />
@@ -440,86 +331,179 @@ export default function ProcessOrder() {
                 </View>
             )}
 
-            {/* Material Cost Modal */}
+            {/* Material Details Modal */}
             <Modal visible={showMaterialModal} animationType="slide" presentationStyle="pageSheet">
-                <View style={styles.modalContainer}>
+                <KeyboardAvoidingView
+                    style={styles.modalContainer}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
                     <View style={styles.modalHeader}>
                         <Text style={styles.modalTitle}>Material Details</Text>
                         <TouchableOpacity onPress={() => setShowMaterialModal(false)}>
                             <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
                         </TouchableOpacity>
                     </View>
+
                     <ScrollView style={styles.modalContent}>
                         {selectedItem && (
                             <>
+                                {/* Material Info */}
                                 <View style={styles.materialHeader}>
                                     <Text style={styles.materialModalName}>{selectedItem.materialName}</Text>
                                     <Text style={styles.materialModalCode}>{selectedItem.materialCode}</Text>
+                                    {selectedItem.specifications && (
+                                        <Text style={styles.materialSpecs}>{selectedItem.specifications}</Text>
+                                    )}
                                 </View>
 
-                                <Text style={styles.costSectionTitle}>Cost Details</Text>
-                                <View style={styles.formRow}>
-                                    <View style={[styles.formGroup, { flex: 1 }]}>
-                                        <Text style={styles.label}>Rate (₹)</Text>
+                                {/* Vendor Details Section */}
+                                <Text style={styles.sectionLabel}>Vendor Details</Text>
+                                <View style={styles.formCard}>
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.label}>Name of Vendor</Text>
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="0.00"
-                                            value={materialCost.rate}
-                                            onChangeText={(text) => setMaterialCost({ ...materialCost, rate: text })}
-                                            onBlur={calculateTotal}
-                                            keyboardType="decimal-pad"
+                                            placeholder="Enter vendor name"
+                                            value={itemForm.vendorName}
+                                            onChangeText={(text) => setItemForm({ ...itemForm, vendorName: text })}
                                             editable={!isPurchased}
                                         />
                                     </View>
-                                    <View style={[styles.formGroup, { flex: 1, marginLeft: 12 }]}>
-                                        <Text style={styles.label}>Quantity</Text>
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.label}>Address</Text>
+                                        <TextInput
+                                            style={[styles.input, styles.textArea]}
+                                            placeholder="Enter address"
+                                            value={itemForm.vendorAddress}
+                                            onChangeText={(text) => setItemForm({ ...itemForm, vendorAddress: text })}
+                                            multiline
+                                            editable={!isPurchased}
+                                        />
+                                    </View>
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.label}>GST No.</Text>
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="0"
-                                            value={materialCost.quantity}
-                                            onChangeText={(text) => setMaterialCost({ ...materialCost, quantity: text })}
-                                            onBlur={calculateTotal}
-                                            keyboardType="decimal-pad"
+                                            placeholder="Enter GST number"
+                                            value={itemForm.vendorGstNo}
+                                            onChangeText={(text) => setItemForm({ ...itemForm, vendorGstNo: text })}
+                                            editable={!isPurchased}
+                                        />
+                                    </View>
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.label}>Contact Person's Name</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Enter contact person name"
+                                            value={itemForm.vendorContactPerson}
+                                            onChangeText={(text) => setItemForm({ ...itemForm, vendorContactPerson: text })}
+                                            editable={!isPurchased}
+                                        />
+                                    </View>
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.label}>Contact Person's Phone</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Enter phone number"
+                                            value={itemForm.vendorContactPhone}
+                                            onChangeText={(text) => setItemForm({ ...itemForm, vendorContactPhone: text })}
+                                            keyboardType="phone-pad"
+                                            editable={!isPurchased}
+                                        />
+                                    </View>
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.label}>Nature of Business</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="e.g., Building Materials Supplier"
+                                            value={itemForm.vendorNatureOfBusiness}
+                                            onChangeText={(text) => setItemForm({ ...itemForm, vendorNatureOfBusiness: text })}
                                             editable={!isPurchased}
                                         />
                                     </View>
                                 </View>
-                                <View style={styles.totalBox}>
-                                    <Text style={styles.totalLabel}>Total</Text>
-                                    <Text style={styles.totalBoxValue}>₹ {materialCost.total.toLocaleString('en-IN')}</Text>
+
+                                {/* Cost Section */}
+                                <Text style={styles.sectionLabel}>Cost</Text>
+                                <View style={styles.formCard}>
+                                    <View style={styles.formRow}>
+                                        <View style={[styles.formGroup, { flex: 1 }]}>
+                                            <Text style={styles.label}>Rate (₹)</Text>
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="0.00"
+                                                value={itemForm.rate}
+                                                onChangeText={(text) => setItemForm({ ...itemForm, rate: text })}
+                                                keyboardType="decimal-pad"
+                                                editable={!isPurchased}
+                                            />
+                                        </View>
+                                        <View style={[styles.formGroup, { flex: 1, marginLeft: 12 }]}>
+                                            <Text style={styles.label}>Quantity</Text>
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="0"
+                                                value={itemForm.quantity}
+                                                onChangeText={(text) => setItemForm({ ...itemForm, quantity: text })}
+                                                keyboardType="decimal-pad"
+                                                editable={!isPurchased}
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.totalBox}>
+                                        <Text style={styles.totalBoxLabel}>Total</Text>
+                                        <Text style={styles.totalBoxValue}>₹ {calculateTotal().toLocaleString('en-IN')}</Text>
+                                    </View>
                                 </View>
 
-                                <Text style={styles.costSectionTitle}>Item Invoices</Text>
-                                {selectedItem.invoices?.map((invoice) => (
-                                    <View key={invoice.id} style={styles.invoiceItem}>
-                                        <Ionicons name="document-outline" size={20} color={theme.colors.primary} />
-                                        <Text style={styles.invoiceName} numberOfLines={1}>{invoice.originalName || invoice.filename}</Text>
-                                    </View>
-                                ))}
-                                {!isPurchased && (
-                                    <TouchableOpacity style={styles.addInvoiceButton} onPress={handleUploadItemInvoice}>
-                                        <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
-                                        <Text style={styles.addInvoiceText}>Add Item Invoice</Text>
+                                {/* Invoices Section */}
+                                <Text style={styles.sectionLabel}>Invoices</Text>
+                                <View style={styles.formCard}>
+                                    {selectedItem.invoices?.map((invoice) => (
+                                        <View key={invoice.id} style={styles.invoiceItem}>
+                                            <Ionicons name="document-outline" size={20} color={theme.colors.primary} />
+                                            <Text style={styles.invoiceName} numberOfLines={1}>{invoice.originalName || invoice.filename}</Text>
+                                        </View>
+                                    ))}
+                                    {selectedItem.invoices?.length === 0 && (
+                                        <Text style={styles.noInvoicesText}>No invoices uploaded yet</Text>
+                                    )}
+                                    <TouchableOpacity
+                                        style={styles.addInvoiceButton}
+                                        onPress={handleUploadItemInvoice}
+                                        disabled={uploadingInvoice}
+                                    >
+                                        {uploadingInvoice ? (
+                                            <ActivityIndicator size="small" color={theme.colors.primary} />
+                                        ) : (
+                                            <>
+                                                <Ionicons name="add-circle" size={20} color={theme.colors.primary} />
+                                                <Text style={styles.addInvoiceText}>Add Invoice</Text>
+                                            </>
+                                        )}
                                     </TouchableOpacity>
-                                )}
+                                </View>
 
+                                {/* Save Button */}
                                 {!isPurchased && (
-                                    <TouchableOpacity 
-                                        style={styles.saveMaterialButton} 
-                                        onPress={handleSaveItemCost}
+                                    <TouchableOpacity
+                                        style={styles.saveButton}
+                                        onPress={handleSaveItem}
                                         disabled={savingItem}
                                     >
                                         {savingItem ? (
                                             <ActivityIndicator color="#FFFFFF" size="small" />
                                         ) : (
-                                            <Text style={styles.saveMaterialButtonText}>Save Cost</Text>
+                                            <Text style={styles.saveButtonText}>Save & Exit</Text>
                                         )}
                                     </TouchableOpacity>
                                 )}
+
+                                <View style={{ height: 40 }} />
                             </>
                         )}
                     </ScrollView>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
@@ -560,36 +544,8 @@ const styles = StyleSheet.create({
     totalLabel: { fontSize: 14, color: theme.colors.textSecondary },
     totalValue: { fontSize: 20, fontWeight: '700', color: theme.colors.success },
     section: { padding: 16 },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
-    sectionSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: -8, marginBottom: 12 },
-    saveLink: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
-    formGroup: { marginBottom: 14 },
-    formRow: { flexDirection: 'row' },
-    label: { fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 6 },
-    input: {
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        fontSize: 15,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        color: theme.colors.textPrimary,
-    },
-    textArea: { minHeight: 70, textAlignVertical: 'top' },
-    invoiceItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.colors.cardBg,
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        gap: 10,
-    },
-    invoiceName: { fontSize: 14, color: theme.colors.textPrimary, flex: 1 },
+    sectionSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4, marginBottom: 12 },
     materialCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -600,10 +556,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
+    materialStatus: { marginRight: 12 },
     materialInfo: { flex: 1 },
     materialName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
     materialCode: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
-    materialCost: { fontSize: 12, color: theme.colors.success, marginTop: 4, fontWeight: '500' },
+    vendorPreview: { fontSize: 12, color: theme.colors.primary, marginTop: 4 },
+    materialCost: { fontSize: 12, color: theme.colors.success, marginTop: 2, fontWeight: '500' },
     qtyBox: { alignItems: 'center', marginRight: 12 },
     qtyValue: { fontSize: 18, fontWeight: '700', color: theme.colors.primary },
     qtyUnit: { fontSize: 11, color: theme.colors.textSecondary },
@@ -639,10 +597,45 @@ const styles = StyleSheet.create({
     },
     modalTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
     modalContent: { flex: 1, padding: 16 },
-    materialHeader: { marginBottom: 20 },
+    materialHeader: {
+        backgroundColor: theme.colors.primary + '08',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 20,
+    },
     materialModalName: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
     materialModalCode: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
-    costSectionTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.primary, marginTop: 16, marginBottom: 12 },
+    materialSpecs: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
+    sectionLabel: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: theme.colors.primary,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    formCard: {
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    formGroup: { marginBottom: 14 },
+    formRow: { flexDirection: 'row' },
+    label: { fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 6 },
+    input: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 15,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        color: theme.colors.textPrimary,
+    },
+    textArea: { minHeight: 70, textAlignVertical: 'top' },
     totalBox: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -652,7 +645,19 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         marginTop: 8,
     },
+    totalBoxLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
     totalBoxValue: { fontSize: 20, fontWeight: '700', color: theme.colors.primary },
+    invoiceItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: theme.colors.surface,
+        borderRadius: 8,
+        marginBottom: 8,
+        gap: 10,
+    },
+    invoiceName: { fontSize: 14, color: theme.colors.textPrimary, flex: 1 },
+    noInvoicesText: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', padding: 12 },
     addInvoiceButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -663,15 +668,13 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.primary,
         borderRadius: 10,
         gap: 8,
-        marginTop: 8,
     },
     addInvoiceText: { fontSize: 15, fontWeight: '600', color: theme.colors.primary },
-    saveMaterialButton: {
+    saveButton: {
         backgroundColor: theme.colors.primary,
-        paddingVertical: 14,
-        borderRadius: 10,
+        paddingVertical: 16,
+        borderRadius: 12,
         alignItems: 'center',
-        marginTop: 24,
     },
-    saveMaterialButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+    saveButtonText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
 });

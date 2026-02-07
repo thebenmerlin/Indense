@@ -1,6 +1,11 @@
 import apiClient from './client';
 import { LoginResponse } from '../types';
 
+export interface SwitchRoleResponse {
+    accessToken: string;
+    user: LoginResponse['user'];
+}
+
 export const authApi = {
     async login(email: string, password: string): Promise<LoginResponse> {
         const response = await apiClient.post('/auth/login', { email, password });
@@ -22,6 +27,11 @@ export const authApi = {
 
     async getProfile(): Promise<LoginResponse['user']> {
         const response = await apiClient.get('/auth/me');
+        return response.data.data;
+    },
+
+    async switchRole(role: 'SITE_ENGINEER' | 'PURCHASE_TEAM' | 'DIRECTOR'): Promise<SwitchRoleResponse> {
+        const response = await apiClient.post('/auth/switch-role', { role });
         return response.data.data;
     },
 };

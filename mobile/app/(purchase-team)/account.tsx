@@ -9,15 +9,19 @@ import {
     Alert,
     Modal,
     TextInput,
+    ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../../src/context';
+import { authApi } from '../../src/api';
 import { Role, ROLE_NAMES } from '../../src/constants';
 
 const theme = {
     colors: {
         primary: '#1D4ED8',
+        success: '#10B981',
         surface: '#F9FAFB',
         cardBg: '#FFFFFF',
         textPrimary: '#111827',
@@ -27,13 +31,60 @@ const theme = {
     }
 };
 
+// Storage keys for auth
+const AUTH_KEYS = {
+    ACCESS_TOKEN: 'auth_access_token',
+    USER: 'auth_user',
+};
+
+// Storage helpers
+const storage = {
+    async set(key: string, value: string): Promise<void> {
+        try {
+            await SecureStore.setItemAsync(key, value);
+        } catch (e) {
+            console.warn('Storage set failed:', e);
+        }
+    },
+};
+
 export default function AccountScreen() {
-    const { user, logout } = useAuth();
+    const { user, logout, refreshAuth } = useAuth();
     const router = useRouter();
     const [darkMode, setDarkMode] = useState(false);
+    const [showAccountInfoModal, setShowAccountInfoModal] = useState(false);
+    const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteConfirmName, setDeleteConfirmName] = useState('');
     const [deleting, setDeleting] = useState(false);
+    const [switchingRole, setSwitchingRole] = useState(false);
+
+    // Change password state
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [changingPassword, setChangingPassword] = useState(false);
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+
+    // Determine if user can switch roles (allowedRoles is populated)
+    const userAny = user as any;
+    const allowedRoles: string[] = userAny?.allowedRoles || [];
+    const canSwitchRole = allowedRoles.length > 0;
+
+    // Get the target role to switch to
+    const getAlternateRole = (): 'SITE_ENGINEER' | 'PURCHASE_TEAM' | null => {
+        if (user?.role === 'PURCHASE_TEAM' && allowedRoles.includes('SITE_ENGINEER')) {
+            return 'SITE_ENGINEER';
+        }
+        if (user?.role === 'SITE_ENGINEER' && allowedRoles.includes('PURCHASE_TEAM')) {
+            return 'PURCHASE_TEAM';
+        }
+        return null;
+    };
+
+    const alternateRole = getAlternateRole();
+
     const handleLogout = () => {
         Alert.alert(
             'Logout',
@@ -43,8 +94,8 @@ export default function AccountScreen() {
                 {
                     text: 'Logout',
                     style: 'destructive',
-                    onPress: () => {
-                        logout();
+                    onPress: async () => {
+                        await logout();
                         router.replace('/');
                     }
                 }
@@ -52,12 +103,77 @@ export default function AccountScreen() {
         );
     };
 
-    const handleChangePassword = () => {
-        Alert.alert('Coming Soon', 'Password change functionality will be available soon');
+    const handleChangePassword = async () => {
+        if (!currentPassword.trim()) {
+            Alert.alert('Error', 'Please enter your current password');
+            return;
+        }
+        if (!newPassword.trim() || newPassword.length < 8) {
+            Alert.alert('Error', 'New password must be at least 8 characters');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert('Error', 'Passwords do not match');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            await authApi.changePassword(currentPassword, newPassword);
+            Alert.alert('Success', 'Password changed successfully');
+            setShowChangePasswordModal(false);
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (error: any) {
+            Alert.alert('Error', error?.response?.data?.message || 'Failed to change password');
+        } finally {
+            setChangingPassword(false);
+        }
     };
 
-    const handleSwitchRole = () => {
-        Alert.alert('Coming Soon', 'Role switching will be available soon');
+    const handleSwitchRole = async () => {
+        if (!alternateRole) {
+            Alert.alert('Not Available', 'Role switching is not enabled for your account. Please contact a Director.');
+            return;
+        }
+
+        const targetRoleName = alternateRole === 'SITE_ENGINEER' ? 'Site Engineer' : 'Purchase Team';
+
+        Alert.alert(
+            'Switch Role',
+            `Are you sure you want to switch to ${targetRoleName}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Switch',
+                    onPress: async () => {
+                        setSwitchingRole(true);
+                        try {
+                            const result = await authApi.switchRole(alternateRole);
+
+                            // Update stored tokens and user
+                            await storage.set(AUTH_KEYS.ACCESS_TOKEN, result.accessToken);
+                            await storage.set(AUTH_KEYS.USER, JSON.stringify(result.user));
+
+                            // Refresh auth context
+                            await refreshAuth();
+
+                            // Navigate to appropriate dashboard
+                            if (alternateRole === 'SITE_ENGINEER') {
+                                router.replace('/(site-engineer)/dashboard');
+                            } else {
+                                router.replace('/(purchase-team)/dashboard');
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Error', error?.response?.data?.message || 'Failed to switch role');
+                        } finally {
+                            setSwitchingRole(false);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const handleDeleteAccount = async () => {
@@ -92,7 +208,6 @@ export default function AccountScreen() {
                     </Text>
                 </View>
                 <Text style={styles.userName}>{user?.name || 'User'}</Text>
-                <Text style={styles.userEmail}>{user?.email}</Text>
                 <View style={styles.roleBadge}>
                     <Text style={styles.roleText}>
                         {user?.role ? ROLE_NAMES[user.role as Role] : 'Purchase Team'}
@@ -100,23 +215,50 @@ export default function AccountScreen() {
                 </View>
             </View>
 
-            {/* Account Info */}
+            {/* Actions Section */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Account Information</Text>
-                <View style={styles.infoCard}>
-                    <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Name</Text>
-                        <Text style={styles.infoValue}>{user?.name}</Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Email</Text>
-                        <Text style={styles.infoValue}>{user?.email}</Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Role</Text>
-                        <Text style={styles.infoValue}>{user?.role ? ROLE_NAMES[user.role as Role] : '-'}</Text>
-                    </View>
-                </View>
+                <Text style={styles.sectionTitle}>Account</Text>
+
+                {/* Account Info Button */}
+                <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => setShowAccountInfoModal(true)}
+                >
+                    <Ionicons name="person-outline" size={20} color={theme.colors.primary} />
+                    <Text style={styles.actionButtonText}>Account Info</Text>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* Change Password Button */}
+                <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => setShowChangePasswordModal(true)}
+                >
+                    <Ionicons name="lock-closed-outline" size={20} color={theme.colors.primary} />
+                    <Text style={styles.actionButtonText}>Change Password</Text>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* Switch Role Button - Only show if user has alternate roles */}
+                {canSwitchRole && alternateRole && (
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={handleSwitchRole}
+                        disabled={switchingRole}
+                    >
+                        <Ionicons name="swap-horizontal-outline" size={20} color={theme.colors.success} />
+                        <Text style={[styles.actionButtonText, { color: theme.colors.success }]}>
+                            {switchingRole ? 'Switching...' :
+                                `Switch to ${alternateRole === 'SITE_ENGINEER' ? 'Site Engineer' : 'Purchase Team'}`
+                            }
+                        </Text>
+                        {switchingRole ? (
+                            <ActivityIndicator size="small" color={theme.colors.success} />
+                        ) : (
+                            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                        )}
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Settings */}
@@ -135,22 +277,6 @@ export default function AccountScreen() {
                         />
                     </View>
                 </View>
-            </View>
-
-            {/* Actions */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Actions</Text>
-                <TouchableOpacity style={styles.actionButton} onPress={handleChangePassword}>
-                    <Ionicons name="lock-closed-outline" size={20} color={theme.colors.primary} />
-                    <Text style={styles.actionButtonText}>Change Password</Text>
-                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionButton} onPress={handleSwitchRole}>
-                    <Ionicons name="swap-horizontal-outline" size={20} color={theme.colors.primary} />
-                    <Text style={styles.actionButtonText}>Switch Role</Text>
-                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
             </View>
 
             {/* Logout */}
@@ -173,6 +299,162 @@ export default function AccountScreen() {
             </View>
 
             <View style={{ height: 40 }} />
+
+            {/* Account Info Modal */}
+            <Modal
+                visible={showAccountInfoModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowAccountInfoModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Account Info</Text>
+                            <TouchableOpacity onPress={() => setShowAccountInfoModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.infoCard}>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>Name</Text>
+                                <Text style={styles.infoValue}>{user?.name || '-'}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>Email</Text>
+                                <Text style={styles.infoValue}>{user?.email || '-'}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>Role</Text>
+                                <Text style={styles.infoValue}>
+                                    {user?.role ? ROLE_NAMES[user.role as Role] : '-'}
+                                </Text>
+                            </View>
+                            {userAny?.phone && (
+                                <View style={styles.infoRow}>
+                                    <Text style={styles.infoLabel}>Phone</Text>
+                                    <Text style={styles.infoValue}>{userAny.phone}</Text>
+                                </View>
+                            )}
+                            {userAny?.dob && (
+                                <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                                    <Text style={styles.infoLabel}>Date of Birth</Text>
+                                    <Text style={styles.infoValue}>
+                                        {new Date(userAny.dob).toLocaleDateString()}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.primaryButton}
+                            onPress={() => setShowAccountInfoModal(false)}
+                        >
+                            <Text style={styles.primaryButtonText}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Change Password Modal */}
+            <Modal
+                visible={showChangePasswordModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowChangePasswordModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Change Password</Text>
+                            <TouchableOpacity onPress={() => setShowChangePasswordModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.inputLabel}>Current Password</Text>
+                            <View style={styles.passwordInputRow}>
+                                <TextInput
+                                    style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                                    placeholder="Enter current password"
+                                    value={currentPassword}
+                                    onChangeText={setCurrentPassword}
+                                    secureTextEntry={!showCurrentPassword}
+                                />
+                                <TouchableOpacity
+                                    style={styles.eyeButton}
+                                    onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                                >
+                                    <Ionicons
+                                        name={showCurrentPassword ? 'eye-off' : 'eye'}
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.inputLabel}>New Password</Text>
+                            <View style={styles.passwordInputRow}>
+                                <TextInput
+                                    style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                                    placeholder="Enter new password (min 8 chars)"
+                                    value={newPassword}
+                                    onChangeText={setNewPassword}
+                                    secureTextEntry={!showNewPassword}
+                                />
+                                <TouchableOpacity
+                                    style={styles.eyeButton}
+                                    onPress={() => setShowNewPassword(!showNewPassword)}
+                                >
+                                    <Ionicons
+                                        name={showNewPassword ? 'eye-off' : 'eye'}
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.inputLabel}>Confirm New Password</Text>
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Confirm new password"
+                                value={confirmPassword}
+                                onChangeText={setConfirmPassword}
+                                secureTextEntry
+                            />
+                        </View>
+
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={styles.modalCancelButton}
+                                onPress={() => {
+                                    setShowChangePasswordModal(false);
+                                    setCurrentPassword('');
+                                    setNewPassword('');
+                                    setConfirmPassword('');
+                                }}
+                            >
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.primaryButton, changingPassword && { opacity: 0.5 }]}
+                                onPress={handleChangePassword}
+                                disabled={changingPassword}
+                            >
+                                <Text style={styles.primaryButtonText}>
+                                    {changingPassword ? 'Changing...' : 'Change Password'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Delete Account Modal */}
             <Modal
@@ -246,7 +528,6 @@ const styles = StyleSheet.create({
     },
     avatarText: { fontSize: 32, fontWeight: '700', color: '#FFFFFF' },
     userName: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
-    userEmail: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
     roleBadge: {
         backgroundColor: 'rgba(255,255,255,0.2)',
         paddingHorizontal: 16,
@@ -258,19 +539,15 @@ const styles = StyleSheet.create({
     section: { padding: 16 },
     sectionTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 8, textTransform: 'uppercase' },
     infoCard: {
-        backgroundColor: theme.colors.cardBg,
+        backgroundColor: theme.colors.surface,
         borderRadius: 12,
         padding: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        elevation: 2,
+        marginBottom: 16,
     },
     infoRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        paddingVertical: 10,
+        paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
@@ -312,7 +589,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: theme.colors.error,
+        backgroundColor: theme.colors.primary,
         padding: 16,
         borderRadius: 12,
         gap: 8,
@@ -321,24 +598,25 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+        justifyContent: 'flex-end',
     },
     modalContent: {
         backgroundColor: theme.colors.cardBg,
-        borderRadius: 16,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
         padding: 24,
-        width: '100%',
-        maxWidth: 400,
+        minHeight: '40%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 20,
     },
     modalTitle: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '700',
         color: theme.colors.textPrimary,
-        marginTop: 16,
-        marginBottom: 12,
     },
     modalMessage: {
         fontSize: 15,
@@ -359,19 +637,40 @@ const styles = StyleSheet.create({
     },
     modalInput: {
         width: '100%',
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: 10,
         paddingHorizontal: 14,
         paddingVertical: 12,
         fontSize: 16,
         color: theme.colors.textPrimary,
-        marginBottom: 20,
+        marginBottom: 16,
+        backgroundColor: theme.colors.surface,
+    },
+    inputContainer: {
+        marginBottom: 4,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: theme.colors.textPrimary,
+        marginBottom: 6,
+    },
+    passwordInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    eyeButton: {
+        position: 'absolute',
+        right: 12,
+        padding: 4,
     },
     modalButtons: {
         flexDirection: 'row',
         width: '100%',
         gap: 12,
+        marginTop: 8,
     },
     modalCancelButton: {
         flex: 1,
@@ -384,6 +683,18 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: theme.colors.textPrimary,
+    },
+    primaryButton: {
+        flex: 1,
+        backgroundColor: theme.colors.primary,
+        paddingVertical: 14,
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    primaryButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
     },
     modalDeleteButton: {
         flex: 1,

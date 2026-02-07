@@ -115,6 +115,22 @@ export interface Indent {
         actualDeliveryDate?: string;
         deliveryStatus?: string;
         createdAt?: string;
+        // Order items with per-material vendor details
+        orderItems?: Array<{
+            id: string;
+            indentItemId?: string | null;
+            materialName: string;
+            materialCode: string;
+            quantity: number;
+            unitPrice?: number | null;
+            totalPrice?: number | null;
+            vendorName?: string | null;
+            vendorAddress?: string | null;
+            vendorGstNo?: string | null;
+            vendorContactPerson?: string | null;
+            vendorContactPhone?: string | null;
+            vendorNatureOfBusiness?: string | null;
+        }>;
     } | null;
     _count?: {
         damageReports?: number;

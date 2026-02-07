@@ -12,6 +12,7 @@ import {
     changePasswordValidation,
     switchSiteValidation,
     updateThemeValidation,
+    switchRoleValidation,
 } from './auth.validation';
 
 const router = Router();
@@ -87,6 +88,14 @@ router.post(
     authenticate,
     validateRequest(switchSiteValidation),
     authController.switchSite.bind(authController)
+);
+
+// Switch active role (for multi-role users)
+router.post(
+    '/switch-role',
+    authenticate,
+    validateRequest(switchRoleValidation),
+    authController.switchRole.bind(authController)
 );
 
 // Update theme preference

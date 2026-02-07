@@ -410,7 +410,7 @@ export const damagesApi = {
 
 export interface CreateOrderPayload {
     indentId: string;
-    vendorName: string;
+    vendorName?: string;
     vendorContact?: string;
     vendorEmail?: string;
     vendorAddress?: string;
@@ -426,6 +426,7 @@ export interface CreateOrderPayload {
     items: Array<{
         materialName: string;
         materialCode: string;
+        specifications?: string | null;
         quantity: number;
         unitPrice?: number;
     }>;

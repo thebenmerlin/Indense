@@ -4,10 +4,17 @@ import { Role } from '../constants/roles';
 export interface User {
     id: string;
     email: string;
+    phone?: string | null;
     name: string;
+    dob?: Date | null;
     role: Role;
-    siteId: string | null;
+    allowedRoles?: Role[]; // Roles user can switch to
+    siteId?: string | null;
     siteName?: string;
+    currentSiteId?: string | null;
+    currentSiteName?: string;
+    sites?: Array<{ id: string; name: string; code: string }>;
+    theme?: string;
 }
 
 export interface LoginResponse {
