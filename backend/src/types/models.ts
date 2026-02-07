@@ -131,12 +131,26 @@ export interface MaterialResponse {
 }
 
 // Indent DTOs
+export interface NewMaterialInput {
+    name: string;
+    specification?: string;
+    dimensions?: string;
+    colour?: string;
+    categoryId?: string;      // Existing category ID
+    categoryName?: string;    // Category name (for lookup or creation)
+    unitId?: string;          // Existing unit ID
+    unitCode?: string;        // Unit code (for lookup)
+    unitName?: string;        // Unit name (for lookup or creation)
+}
+
 export interface IndentItemInput {
     materialId: string;
     requestedQty: number;
     specifications?: Record<string, string>;
     notes?: string;
-    isUrgent?: boolean;   // Flag for urgent materials
+    isUrgent?: boolean;
+    isNewMaterial?: boolean;          // Flag for new materials
+    newMaterial?: NewMaterialInput;   // Data for creating new material
 }
 
 export interface CreateIndentDto {

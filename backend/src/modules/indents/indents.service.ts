@@ -144,14 +144,122 @@ class IndentsService {
         const site = await prisma.site.findUnique({ where: { id: siteId } });
         if (!site) throw new BadRequestError('Site not found');
 
-        // Validate all materials exist
-        const materialIds = data.items.map((item) => item.materialId);
-        const materials = await prisma.material.findMany({
-            where: { id: { in: materialIds }, isActive: true },
-        });
+        // Process items - create new materials if needed
+        const processedItems: Array<{
+            materialId: string;
+            requestedQty: number;
+            specifications: Record<string, string> | undefined;
+            notes: string | undefined;
+            isUrgent: boolean;
+        }> = [];
 
-        if (materials.length !== materialIds.length) {
-            throw new BadRequestError('One or more materials not found or inactive');
+        for (const item of data.items) {
+            let materialId = item.materialId;
+
+            // Check if this is a new material (temp ID or marked as new)
+            if (item.materialId.startsWith('temp-') || item.isNewMaterial) {
+                if (!item.newMaterial) {
+                    throw new BadRequestError('New material data is required for new materials');
+                }
+
+                const newMat = item.newMaterial;
+
+                // Find or create category
+                let categoryId: string | undefined;
+                if (newMat.categoryId) {
+                    categoryId = newMat.categoryId;
+                } else if (newMat.categoryName) {
+                    // Find existing category by name
+                    let category = await prisma.itemGroup.findFirst({
+                        where: { name: { equals: newMat.categoryName, mode: 'insensitive' } },
+                    });
+
+                    if (!category) {
+                        // Create new category
+                        category = await prisma.itemGroup.create({
+                            data: { name: newMat.categoryName, isActive: true },
+                        });
+                    }
+                    categoryId = category.id;
+                }
+
+                if (!categoryId) {
+                    throw new BadRequestError('Category is required for new materials');
+                }
+
+                // Find or create unit
+                let unitId: string | undefined;
+                if (newMat.unitId) {
+                    unitId = newMat.unitId;
+                } else if (newMat.unitCode || newMat.unitName) {
+                    // Find existing unit by code or name
+                    let unit = await prisma.unitOfMeasure.findFirst({
+                        where: {
+                            OR: [
+                                { code: { equals: newMat.unitCode || '', mode: 'insensitive' } },
+                                { name: { equals: newMat.unitName || '', mode: 'insensitive' } },
+                            ],
+                        },
+                    });
+
+                    if (!unit && (newMat.unitCode || newMat.unitName)) {
+                        // Create new unit
+                        const unitCode = newMat.unitCode || newMat.unitName!.substring(0, 10).toUpperCase();
+                        unit = await prisma.unitOfMeasure.create({
+                            data: {
+                                code: unitCode,
+                                name: newMat.unitName || unitCode,
+                                isActive: true,
+                            },
+                        });
+                    }
+                    unitId = unit?.id;
+                }
+
+                if (!unitId) {
+                    throw new BadRequestError('Unit is required for new materials');
+                }
+
+                // Generate material code
+                const materialCode = `NEW-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+                // Create the new material
+                const newMaterial = await prisma.material.create({
+                    data: {
+                        name: newMat.name,
+                        code: materialCode,
+                        itemGroupId: categoryId,
+                        unitId: unitId,
+                        description: [newMat.specification, newMat.dimensions, newMat.colour].filter(Boolean).join(' | ') || null,
+                        specifications: {
+                            specification: newMat.specification || '',
+                            dimensions: newMat.dimensions || '',
+                            colour: newMat.colour || '',
+                        },
+                        isSystemData: false,
+                        isActive: true,
+                    },
+                });
+
+                materialId = newMaterial.id;
+            } else {
+                // Validate existing material
+                const material = await prisma.material.findUnique({
+                    where: { id: materialId, isActive: true },
+                });
+
+                if (!material) {
+                    throw new BadRequestError(`Material not found: ${materialId}`);
+                }
+            }
+
+            processedItems.push({
+                materialId,
+                requestedQty: item.requestedQty,
+                specifications: item.specifications,
+                notes: item.notes,
+                isUrgent: item.isUrgent || false,
+            });
         }
 
         const indentNumber = await this.generateIndentNumber(site.code);
@@ -169,13 +277,13 @@ class IndentsService {
                 requiredByDate: data.requiredByDate,
                 expectedDeliveryDate: data.expectedDeliveryDate,
                 items: {
-                    create: data.items.map((item) => ({
+                    create: processedItems.map((item) => ({
                         materialId: item.materialId,
                         requestedQty: item.requestedQty,
                         pendingQty: item.requestedQty,
                         specifications: item.specifications,
                         notes: item.notes,
-                        isUrgent: item.isUrgent || false,
+                        isUrgent: item.isUrgent,
                     })),
                 },
             },
@@ -572,6 +680,71 @@ class IndentsService {
                 material: true,
             },
         });
+
+        // Refresh indent items to check overall arrival status
+        const refreshedIndent = await prisma.indent.findUnique({
+            where: { id: indentId },
+            include: { items: true },
+        });
+
+        if (refreshedIndent) {
+            // Check if any item has PARTIAL or NOT_ARRIVED status
+            const hasPartialOrNotArrived = refreshedIndent.items.some(
+                (i) => i.arrivalStatus === 'PARTIAL' || i.arrivalStatus === 'NOT_ARRIVED'
+            );
+
+            // Check if all items are ARRIVED
+            const allArrived = refreshedIndent.items.every(
+                (i) => i.arrivalStatus === 'ARRIVED'
+            );
+
+            // Update indent status based on arrival statuses
+            if (hasPartialOrNotArrived && refreshedIndent.status === IndentStatus.ORDER_PLACED) {
+                await prisma.indent.update({
+                    where: { id: indentId },
+                    data: { status: IndentStatus.PARTIALLY_RECEIVED },
+                });
+
+                // Notify PT and Director about partial receipt
+                const partialMessage = `Indent ${refreshedIndent.indentNumber} has materials with partial or pending arrival.`;
+                await notificationsService.notifyRole(
+                    NotificationType.MATERIAL_RECEIVED,
+                    Role.PURCHASE_TEAM,
+                    indentId,
+                    partialMessage
+                );
+
+                await notificationsService.notifyRole(
+                    NotificationType.MATERIAL_RECEIVED,
+                    Role.DIRECTOR,
+                    indentId,
+                    partialMessage
+                );
+            } else if (allArrived && refreshedIndent.items.length > 0 &&
+                (refreshedIndent.status === IndentStatus.ORDER_PLACED ||
+                    refreshedIndent.status === IndentStatus.PARTIALLY_RECEIVED)) {
+                await prisma.indent.update({
+                    where: { id: indentId },
+                    data: { status: IndentStatus.FULLY_RECEIVED },
+                });
+
+                // Notify about full receipt
+                const fullMessage = `All materials for indent ${refreshedIndent.indentNumber} have arrived.`;
+                await notificationsService.notifyRole(
+                    NotificationType.MATERIAL_RECEIVED,
+                    Role.PURCHASE_TEAM,
+                    indentId,
+                    fullMessage
+                );
+
+                await notificationsService.notifyRole(
+                    NotificationType.MATERIAL_RECEIVED,
+                    Role.DIRECTOR,
+                    indentId,
+                    fullMessage
+                );
+            }
+        }
 
         // If NOT_ARRIVED, notify Purchase Team and Director via push
         if (arrivalStatus === 'NOT_ARRIVED') {

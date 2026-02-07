@@ -41,6 +41,8 @@ export default function IndentDetails() {
     const [arrivalStates, setArrivalStates] = useState<Record<string, ArrivalStatus>>({});
     const [arrivalNotes, setArrivalNotes] = useState<Record<string, string>>({});
     const [selectedMaterial, setSelectedMaterial] = useState<IndentItem | null>(null);
+    const [originalArrivalStates, setOriginalArrivalStates] = useState<Record<string, ArrivalStatus>>({});
+    const [originalArrivalNotes, setOriginalArrivalNotes] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (id) {
@@ -60,7 +62,9 @@ export default function IndentDetails() {
                 notes[item.id] = item.arrivalNotes || '';
             });
             setArrivalStates(states);
+            setOriginalArrivalStates(states);
             setArrivalNotes(notes);
+            setOriginalArrivalNotes(notes);
         } catch (error) {
             console.error('Failed to fetch indent:', error);
         } finally {
@@ -68,8 +72,19 @@ export default function IndentDetails() {
         }
     };
 
-    const isPurchased = !!indent?.order?.orderNumber || indent?.status === 'ORDER_PLACED' || indent?.status === 'FULLY_RECEIVED';
-    const canClose = isPurchased && indent?.status !== 'CLOSED';
+    const isPurchased = !!indent?.order?.orderNumber || indent?.status === 'ORDER_PLACED' || indent?.status === 'FULLY_RECEIVED' || indent?.status === 'PARTIALLY_RECEIVED' || indent?.status === 'CLOSED';
+    const isClosed = indent?.status === 'CLOSED';
+    const canClose = isPurchased && !isClosed;
+
+    // Check if there are unsaved arrival status changes
+    const hasUnsavedChanges = indent?.items?.some(item => {
+        const stateChanged = arrivalStates[item.id] !== originalArrivalStates[item.id];
+        const notesChanged = arrivalStates[item.id] === 'PARTIAL' && arrivalNotes[item.id] !== originalArrivalNotes[item.id];
+        return stateChanged || notesChanged;
+    }) || false;
+
+    // Check if any item has arrival status set (for showing save button)
+    const hasAnyArrivalStatus = Object.values(arrivalStates).some(status => status !== null);
 
     const handleArrivalChange = async (itemId: string, status: ArrivalStatus) => {
         const prevStatus = arrivalStates[itemId];
@@ -92,6 +107,40 @@ export default function IndentDetails() {
         }
     };
 
+    const handleSaveArrivalStatus = async () => {
+        if (!indent?.items) return;
+
+        setSaving(true);
+        try {
+            // Save each item that has a status set
+            const savePromises = indent.items
+                .filter(item => arrivalStates[item.id] !== null)
+                .map(item =>
+                    indentsApi.updateArrivalStatus(
+                        id!,
+                        item.id,
+                        arrivalStates[item.id]!,
+                        arrivalNotes[item.id]
+                    )
+                );
+
+            await Promise.all(savePromises);
+
+            // Update original states to match current (no longer dirty)
+            setOriginalArrivalStates({ ...arrivalStates });
+            setOriginalArrivalNotes({ ...arrivalNotes });
+
+            Alert.alert('Success', 'Arrival status saved successfully');
+
+            // Refresh to get updated indent status
+            fetchIndent();
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.error || 'Failed to save arrival status');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleCloseIndent = () => {
         Alert.alert(
             'Close Indent',
@@ -104,7 +153,7 @@ export default function IndentDetails() {
                     onPress: async () => {
                         setSaving(true);
                         try {
-                            await indentsApi.close(id!);
+                            await indentsApi.closeByEngineer(id!);
                             Alert.alert('Success', 'Indent closed successfully');
                             router.back();
                         } catch (error: any) {
@@ -249,21 +298,9 @@ export default function IndentDetails() {
 
                         <View style={styles.qtyRow}>
                             <View style={styles.qtyItem}>
-                                <Text style={styles.qtyLabel}>Requested</Text>
+                                <Text style={styles.qtyLabel}>Requested Quantity</Text>
                                 <Text style={styles.qtyValue}>
                                     {item.requestedQty} {item.material?.unit?.code}
-                                </Text>
-                            </View>
-                            <View style={styles.qtyItem}>
-                                <Text style={styles.qtyLabel}>Received</Text>
-                                <Text style={styles.qtyValue}>
-                                    {item.receivedQty} {item.material?.unit?.code}
-                                </Text>
-                            </View>
-                            <View style={styles.qtyItem}>
-                                <Text style={styles.qtyLabel}>Pending</Text>
-                                <Text style={[styles.qtyValue, item.pendingQty > 0 && { color: theme.colors.warning }]}>
-                                    {item.pendingQty} {item.material?.unit?.code}
                                 </Text>
                             </View>
                         </View>
@@ -279,8 +316,8 @@ export default function IndentDetails() {
                             </View>
                         )}
 
-                        {/* Arrival Checkboxes - only for purchased indents */}
-                        {isPurchased && (
+                        {/* Arrival Checkboxes - only for purchased indents that are not closed */}
+                        {isPurchased && !isClosed && (
                             <>
                                 <View style={styles.arrivalSection}>
                                     <Text style={styles.arrivalLabel}>Arrival Status:</Text>
@@ -299,8 +336,52 @@ export default function IndentDetails() {
                                 )}
                             </>
                         )}
+
+                        {/* Read-only arrival status display for closed indents */}
+                        {isClosed && item.arrivalStatus && (
+                            <View style={styles.arrivalSection}>
+                                <Text style={styles.arrivalLabel}>Arrival Status:</Text>
+                                <View style={[
+                                    styles.arrivalBadge,
+                                    item.arrivalStatus === 'ARRIVED' && styles.arrivalBadgeArrived,
+                                    item.arrivalStatus === 'PARTIAL' && styles.arrivalBadgePartial,
+                                    item.arrivalStatus === 'NOT_ARRIVED' && styles.arrivalBadgeNotArrived,
+                                ]}>
+                                    <Ionicons
+                                        name={item.arrivalStatus === 'ARRIVED' ? 'checkmark-circle' :
+                                            item.arrivalStatus === 'PARTIAL' ? 'ellipse-outline' : 'close-circle'}
+                                        size={16}
+                                        color="#FFFFFF"
+                                    />
+                                    <Text style={styles.arrivalBadgeText}>
+                                        {item.arrivalStatus === 'ARRIVED' ? 'Arrived' :
+                                            item.arrivalStatus === 'PARTIAL' ? 'Partial' : 'Not Arrived'}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 ))}
+
+                {/* Save Arrival Status Button - only show when not closed */}
+                {isPurchased && !isClosed && hasAnyArrivalStatus && (
+                    <TouchableOpacity
+                        style={[styles.saveArrivalButton, !hasUnsavedChanges && styles.saveArrivalButtonDisabled]}
+                        onPress={handleSaveArrivalStatus}
+                        disabled={saving || !hasUnsavedChanges}
+                    >
+                        {saving ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                        ) : (
+                            <>
+                                <Ionicons name="save-outline" size={20} color="#FFFFFF" />
+                                <Text style={styles.saveArrivalButtonText}>
+                                    {hasUnsavedChanges ? 'Save Arrival Status' : 'Status Saved'}
+                                </Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Vendor Details - only for purchased indents, no cost */}
@@ -419,17 +500,9 @@ export default function IndentDetails() {
 
                             <View style={styles.modalQtyGrid}>
                                 <View style={styles.modalQtyItem}>
-                                    <Text style={styles.modalQtyLabel}>Requested</Text>
-                                    <Text style={styles.modalQtyValue}>{selectedMaterial.requestedQty}</Text>
-                                </View>
-                                <View style={styles.modalQtyItem}>
-                                    <Text style={styles.modalQtyLabel}>Received</Text>
-                                    <Text style={styles.modalQtyValue}>{selectedMaterial.receivedQty}</Text>
-                                </View>
-                                <View style={styles.modalQtyItem}>
-                                    <Text style={styles.modalQtyLabel}>Pending</Text>
-                                    <Text style={[styles.modalQtyValue, selectedMaterial.pendingQty > 0 && { color: theme.colors.warning }]}>
-                                        {selectedMaterial.pendingQty}
+                                    <Text style={styles.modalQtyLabel}>Requested Quantity</Text>
+                                    <Text style={styles.modalQtyValue}>
+                                        {selectedMaterial.requestedQty} {selectedMaterial.material?.unit?.code}
                                     </Text>
                                 </View>
                             </View>
@@ -659,6 +732,49 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
         minHeight: 60,
         textAlignVertical: 'top',
+    },
+    saveArrivalButton: {
+        backgroundColor: theme.colors.primary,
+        borderRadius: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 16,
+    },
+    saveArrivalButtonDisabled: {
+        backgroundColor: theme.colors.success,
+        opacity: 0.8,
+    },
+    saveArrivalButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    arrivalBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: theme.colors.textSecondary,
+    },
+    arrivalBadgeArrived: {
+        backgroundColor: theme.colors.success,
+    },
+    arrivalBadgePartial: {
+        backgroundColor: theme.colors.warning,
+    },
+    arrivalBadgeNotArrived: {
+        backgroundColor: theme.colors.error,
+    },
+    arrivalBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: '600',
     },
     vendorCard: {
         backgroundColor: theme.colors.cardBg,

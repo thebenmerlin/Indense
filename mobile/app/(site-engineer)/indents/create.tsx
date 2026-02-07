@@ -194,11 +194,18 @@ export default function CreateIndent() {
                     requestedQty: i.requestedQty,
                     notes: i.notes || undefined,
                     isUrgent: i.isUrgent,
-                    // For new materials, we'll need to include specs
-                    specifications: i.isNewMaterial ? {
+                    isNewMaterial: i.isNewMaterial,
+                    // For new materials, include all the material data
+                    newMaterial: i.isNewMaterial ? {
+                        name: i.materialName,
                         specification: i.specification || '',
                         dimensions: i.dimensions || '',
                         colour: i.colour || '',
+                        categoryId: i.categoryId || '',
+                        categoryName: i.categoryName || '',
+                        unitId: i.unitId || '',
+                        unitCode: i.unitCode || '',
+                        unitName: i.unitName || '',
                     } : undefined,
                 })),
             };

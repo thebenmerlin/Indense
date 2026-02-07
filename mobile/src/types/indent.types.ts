@@ -121,6 +121,18 @@ export interface Indent {
     };
 }
 
+export interface NewMaterialPayloadData {
+    name: string;
+    specification?: string;
+    dimensions?: string;
+    colour?: string;
+    categoryId?: string;
+    categoryName?: string;
+    unitId?: string;
+    unitCode?: string;
+    unitName?: string;
+}
+
 export interface CreateIndentPayload {
     name: string;
     description?: string;
@@ -134,6 +146,8 @@ export interface CreateIndentPayload {
         specifications?: Record<string, string>;
         notes?: string;
         isUrgent?: boolean;
+        isNewMaterial?: boolean;
+        newMaterial?: NewMaterialPayloadData;
     }[];
 }
 

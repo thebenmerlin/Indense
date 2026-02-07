@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -10,9 +10,9 @@ import {
     ActivityIndicator,
     Switch,
     Alert,
+    FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 import { materialsApi } from '../api';
 import { ItemGroup, UnitOfMeasure } from '../types';
 
@@ -31,7 +31,7 @@ const theme = {
 };
 
 export interface NewMaterialData {
-    id: string; // Temporary ID for local state
+    id: string;
     name: string;
     specification: string;
     dimensions: string;
@@ -51,17 +51,29 @@ interface AddMaterialModalProps {
 }
 
 export default function AddMaterialModal({ visible, onClose, onAdd }: AddMaterialModalProps) {
+    // Form fields
     const [name, setName] = useState('');
     const [specification, setSpecification] = useState('');
     const [dimensions, setDimensions] = useState('');
     const [colour, setColour] = useState('');
-    const [categoryId, setCategoryId] = useState('');
-    const [unitId, setUnitId] = useState('');
+    const [category, setCategory] = useState('');
+    const [unit, setUnit] = useState('');
     const [isUrgent, setIsUrgent] = useState(false);
 
+    // Autocomplete data
     const [categories, setCategories] = useState<ItemGroup[]>([]);
     const [units, setUnits] = useState<UnitOfMeasure[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Autocomplete suggestions
+    const [categorySuggestions, setCategorySuggestions] = useState<ItemGroup[]>([]);
+    const [unitSuggestions, setUnitSuggestions] = useState<UnitOfMeasure[]>([]);
+    const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+    const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
+
+    // Selected IDs (optional - for matching existing records)
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+    const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
 
     useEffect(() => {
         if (visible) {
@@ -80,10 +92,54 @@ export default function AddMaterialModal({ visible, onClose, onAdd }: AddMateria
             setUnits(uoms);
         } catch (error) {
             console.error('Failed to load dropdown data:', error);
-            Alert.alert('Error', 'Failed to load categories and units');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCategoryChange = (text: string) => {
+        setCategory(text);
+        setSelectedCategoryId(null);
+
+        if (text.length >= 1) {
+            const filtered = categories.filter(c =>
+                c.name.toLowerCase().includes(text.toLowerCase())
+            );
+            setCategorySuggestions(filtered);
+            setShowCategorySuggestions(filtered.length > 0);
+        } else {
+            setCategorySuggestions([]);
+            setShowCategorySuggestions(false);
+        }
+    };
+
+    const handleUnitChange = (text: string) => {
+        setUnit(text);
+        setSelectedUnitId(null);
+
+        if (text.length >= 1) {
+            const filtered = units.filter(u =>
+                u.name.toLowerCase().includes(text.toLowerCase()) ||
+                u.code.toLowerCase().includes(text.toLowerCase())
+            );
+            setUnitSuggestions(filtered);
+            setShowUnitSuggestions(filtered.length > 0);
+        } else {
+            setUnitSuggestions([]);
+            setShowUnitSuggestions(false);
+        }
+    };
+
+    const selectCategory = (cat: ItemGroup) => {
+        setCategory(cat.name);
+        setSelectedCategoryId(cat.id);
+        setShowCategorySuggestions(false);
+    };
+
+    const selectUnit = (u: UnitOfMeasure) => {
+        setUnit(`${u.name} (${u.code})`);
+        setSelectedUnitId(u.id);
+        setShowUnitSuggestions(false);
     };
 
     const resetForm = () => {
@@ -91,9 +147,13 @@ export default function AddMaterialModal({ visible, onClose, onAdd }: AddMateria
         setSpecification('');
         setDimensions('');
         setColour('');
-        setCategoryId('');
-        setUnitId('');
+        setCategory('');
+        setUnit('');
+        setSelectedCategoryId(null);
+        setSelectedUnitId(null);
         setIsUrgent(false);
+        setCategorySuggestions([]);
+        setUnitSuggestions([]);
     };
 
     const handleAdd = () => {
@@ -101,17 +161,39 @@ export default function AddMaterialModal({ visible, onClose, onAdd }: AddMateria
             Alert.alert('Required', 'Material name is required');
             return;
         }
-        if (!categoryId) {
+        if (!category.trim()) {
             Alert.alert('Required', 'Category is required');
             return;
         }
-        if (!unitId) {
+        if (!unit.trim()) {
             Alert.alert('Required', 'Unit is required');
             return;
         }
 
-        const selectedCategory = categories.find(c => c.id === categoryId);
-        const selectedUnit = units.find(u => u.id === unitId);
+        // Find matching category and unit, or use the typed values
+        const matchedCategory = categories.find(c =>
+            c.name.toLowerCase() === category.toLowerCase()
+        );
+        const matchedUnit = units.find(u =>
+            u.name.toLowerCase() === unit.toLowerCase() ||
+            u.code.toLowerCase() === unit.toLowerCase() ||
+            `${u.name} (${u.code})`.toLowerCase() === unit.toLowerCase()
+        );
+
+        // Extract unit code from the input (e.g., "Kilogram (KG)" -> "KG")
+        let unitCode = unit.trim();
+        let unitName = unit.trim();
+        if (matchedUnit) {
+            unitCode = matchedUnit.code;
+            unitName = matchedUnit.name;
+        } else {
+            // If user typed custom, try to parse "Name (Code)" format
+            const match = unit.match(/^(.+?)\s*\(([^)]+)\)$/);
+            if (match) {
+                unitName = match[1].trim();
+                unitCode = match[2].trim();
+            }
+        }
 
         const newMaterial: NewMaterialData = {
             id: `temp-${Date.now()}`,
@@ -119,11 +201,11 @@ export default function AddMaterialModal({ visible, onClose, onAdd }: AddMateria
             specification: specification.trim(),
             dimensions: dimensions.trim(),
             colour: colour.trim(),
-            categoryId,
-            categoryName: selectedCategory?.name || '',
-            unitId,
-            unitCode: selectedUnit?.code || '',
-            unitName: selectedUnit?.name || '',
+            categoryId: matchedCategory?.id || '',
+            categoryName: matchedCategory?.name || category.trim(),
+            unitId: matchedUnit?.id || '',
+            unitCode: unitCode,
+            unitName: unitName,
             isUrgent,
         };
 
@@ -207,42 +289,75 @@ export default function AddMaterialModal({ visible, onClose, onAdd }: AddMateria
                             />
                         </View>
 
-                        {/* Category Picker */}
+                        {/* Category with Autocomplete */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Category *</Text>
-                            <View style={styles.pickerContainer}>
-                                <Picker
-                                    selectedValue={categoryId}
-                                    onValueChange={setCategoryId}
-                                    style={styles.picker}
-                                >
-                                    <Picker.Item label="Select category..." value="" />
-                                    {categories.map(cat => (
-                                        <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Type to search or enter new category"
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={category}
+                                onChangeText={handleCategoryChange}
+                                onFocus={() => {
+                                    if (category.length >= 1) {
+                                        const filtered = categories.filter(c =>
+                                            c.name.toLowerCase().includes(category.toLowerCase())
+                                        );
+                                        setCategorySuggestions(filtered);
+                                        setShowCategorySuggestions(filtered.length > 0);
+                                    }
+                                }}
+                                onBlur={() => setTimeout(() => setShowCategorySuggestions(false), 200)}
+                            />
+                            {showCategorySuggestions && (
+                                <View style={styles.suggestionsContainer}>
+                                    {categorySuggestions.slice(0, 5).map(cat => (
+                                        <TouchableOpacity
+                                            key={cat.id}
+                                            style={styles.suggestionItem}
+                                            onPress={() => selectCategory(cat)}
+                                        >
+                                            <Text style={styles.suggestionText}>{cat.name}</Text>
+                                        </TouchableOpacity>
                                     ))}
-                                </Picker>
-                            </View>
+                                </View>
+                            )}
                         </View>
 
-                        {/* Unit Picker */}
+                        {/* Unit with Autocomplete */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Unit *</Text>
-                            <View style={styles.pickerContainer}>
-                                <Picker
-                                    selectedValue={unitId}
-                                    onValueChange={setUnitId}
-                                    style={styles.picker}
-                                >
-                                    <Picker.Item label="Select unit..." value="" />
-                                    {units.map(unit => (
-                                        <Picker.Item
-                                            key={unit.id}
-                                            label={`${unit.name} (${unit.code})`}
-                                            value={unit.id}
-                                        />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Type to search or enter new unit"
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={unit}
+                                onChangeText={handleUnitChange}
+                                onFocus={() => {
+                                    if (unit.length >= 1) {
+                                        const filtered = units.filter(u =>
+                                            u.name.toLowerCase().includes(unit.toLowerCase()) ||
+                                            u.code.toLowerCase().includes(unit.toLowerCase())
+                                        );
+                                        setUnitSuggestions(filtered);
+                                        setShowUnitSuggestions(filtered.length > 0);
+                                    }
+                                }}
+                                onBlur={() => setTimeout(() => setShowUnitSuggestions(false), 200)}
+                            />
+                            {showUnitSuggestions && (
+                                <View style={styles.suggestionsContainer}>
+                                    {unitSuggestions.slice(0, 5).map(u => (
+                                        <TouchableOpacity
+                                            key={u.id}
+                                            style={styles.suggestionItem}
+                                            onPress={() => selectUnit(u)}
+                                        >
+                                            <Text style={styles.suggestionText}>{u.name} ({u.code})</Text>
+                                        </TouchableOpacity>
                                     ))}
-                                </Picker>
-                            </View>
+                                </View>
+                            )}
                         </View>
 
                         {/* Urgent Toggle */}
@@ -319,6 +434,8 @@ const styles = StyleSheet.create({
     },
     inputGroup: {
         marginBottom: 16,
+        position: 'relative',
+        zIndex: 1,
     },
     label: {
         fontSize: 14,
@@ -336,15 +453,33 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.border,
         color: theme.colors.textPrimary,
     },
-    pickerContainer: {
+    suggestionsContainer: {
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        right: 0,
         backgroundColor: theme.colors.cardBg,
-        borderRadius: 10,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        overflow: 'hidden',
+        marginTop: 4,
+        maxHeight: 200,
+        zIndex: 1000,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
     },
-    picker: {
-        height: 50,
+    suggestionItem: {
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    suggestionText: {
+        fontSize: 15,
+        color: theme.colors.textPrimary,
     },
     urgentRow: {
         flexDirection: 'row',

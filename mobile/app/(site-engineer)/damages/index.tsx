@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -7,9 +7,13 @@ import {
     TouchableOpacity,
     RefreshControl,
     ActivityIndicator,
+    TextInput,
+    Modal,
+    Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { damagesApi } from '../../../src/api';
 import { Indent, DamageReport } from '../../../src/types';
 
@@ -23,46 +27,79 @@ const theme = {
         border: '#D1D5DB',
         error: '#EF4444',
         warning: '#F59E0B',
+        success: '#10B981',
     }
 };
+
+type ViewMode = 'damage-list' | 'indent-picker';
 
 interface DamageRecord {
     id: string;
     indentId: string;
     indentName: string;
     indentNumber: string;
-    status: 'DRAFT' | 'SUBMITTED';
+    siteName: string;
+    status: 'DRAFT' | 'REPORTED';
     damageCount: number;
     createdAt: Date;
 }
 
 export default function DamagesScreen() {
+    const [viewMode, setViewMode] = useState<ViewMode>('damage-list');
     const [damageRecords, setDamageRecords] = useState<DamageRecord[]>([]);
+    const [purchasedIndents, setPurchasedIndents] = useState<Indent[]>([]);
+    const [filteredIndents, setFilteredIndents] = useState<Indent[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [showIndentPicker, setShowIndentPicker] = useState(false);
-    const [purchasedIndents, setPurchasedIndents] = useState<Indent[]>([]);
     const [loadingIndents, setLoadingIndents] = useState(false);
+
+    // Search and filter
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showFilterModal, setShowFilterModal] = useState(false);
+    const [fromDate, setFromDate] = useState<Date | null>(null);
+    const [toDate, setToDate] = useState<Date | null>(null);
+    const [showFromPicker, setShowFromPicker] = useState(false);
+    const [showToPicker, setShowToPicker] = useState(false);
+    const [activeFilter, setActiveFilter] = useState(false);
+
     const router = useRouter();
 
     useEffect(() => {
-        loadData();
+        loadDamages();
     }, []);
 
-    const loadData = async () => {
+    const loadDamages = async () => {
         try {
-            // Load existing damage reports from API
             const response = await damagesApi.getAll({ limit: 100 });
-            const records: DamageRecord[] = response.data.map((report: DamageReport) => ({
-                id: report.id,
-                indentId: report.indentId,
-                indentName: report.indent?.name || report.indent?.indentNumber || 'Unknown Indent',
-                indentNumber: report.indent?.indentNumber || '',
-                status: report.status as 'DRAFT' | 'SUBMITTED',
-                damageCount: report.images?.length || 1,
-                createdAt: new Date(report.createdAt),
-            }));
-            setDamageRecords(records);
+
+            // Group by indent and create records
+            const indentMap = new Map<string, DamageRecord>();
+
+            response.data.forEach((report: DamageReport) => {
+                const indentId = report.indentId;
+                const existing = indentMap.get(indentId);
+
+                if (existing) {
+                    existing.damageCount += 1;
+                    // Keep the latest status
+                    if (report.status === 'REPORTED') {
+                        existing.status = 'REPORTED';
+                    }
+                } else {
+                    indentMap.set(indentId, {
+                        id: report.id,
+                        indentId: report.indentId,
+                        indentName: report.indent?.name || report.indent?.indentNumber || 'Unknown Indent',
+                        indentNumber: report.indent?.indentNumber || '',
+                        siteName: report.indent?.site?.name || '',
+                        status: report.status === 'DRAFT' ? 'DRAFT' : 'REPORTED',
+                        damageCount: 1,
+                        createdAt: new Date(report.createdAt),
+                    });
+                }
+            });
+
+            setDamageRecords(Array.from(indentMap.values()));
         } catch (error) {
             console.error('Failed to load damages:', error);
         } finally {
@@ -74,10 +111,10 @@ export default function DamagesScreen() {
     const loadPurchasedIndents = async () => {
         setLoadingIndents(true);
         try {
-            // Use the dedicated endpoint to get purchased indents for damage reporting
-            const response = await damagesApi.getPurchasedIndents();
+            const response = await damagesApi.getPurchasedIndents({ limit: 100 });
             setPurchasedIndents(response.data);
-            setShowIndentPicker(true);
+            setFilteredIndents(response.data);
+            setViewMode('indent-picker');
         } catch (error) {
             console.error('Failed to load purchased indents:', error);
         } finally {
@@ -85,9 +122,35 @@ export default function DamagesScreen() {
         }
     };
 
+    // Apply search and date filters to indents
+    useEffect(() => {
+        if (viewMode !== 'indent-picker') return;
+
+        let result = [...purchasedIndents];
+
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(
+                i => i.name?.toLowerCase().includes(query) ||
+                    i.indentNumber.toLowerCase().includes(query)
+            );
+        }
+
+        if (fromDate) {
+            result = result.filter(i => new Date(i.createdAt) >= fromDate);
+        }
+        if (toDate) {
+            const endOfDay = new Date(toDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            result = result.filter(i => new Date(i.createdAt) <= endOfDay);
+        }
+
+        setFilteredIndents(result);
+    }, [searchQuery, purchasedIndents, fromDate, toDate, viewMode]);
+
     const onRefresh = () => {
         setRefreshing(true);
-        loadData();
+        loadDamages();
     };
 
     const formatDate = (dateStr: Date | string) => {
@@ -99,9 +162,45 @@ export default function DamagesScreen() {
         });
     };
 
+    const formatFilterDate = (date: Date | null) => {
+        if (!date) return 'Select date';
+        return formatDate(date);
+    };
+
+    const handleFromDateChange = (event: any, selectedDate?: Date) => {
+        setShowFromPicker(Platform.OS === 'ios');
+        if (selectedDate) setFromDate(selectedDate);
+    };
+
+    const handleToDateChange = (event: any, selectedDate?: Date) => {
+        setShowToPicker(Platform.OS === 'ios');
+        if (selectedDate) setToDate(selectedDate);
+    };
+
+    const applyFilters = () => {
+        setActiveFilter(fromDate !== null || toDate !== null);
+        setShowFilterModal(false);
+    };
+
+    const clearFilters = () => {
+        setFromDate(null);
+        setToDate(null);
+        setActiveFilter(false);
+        setShowFilterModal(false);
+    };
+
+    const handleSelectIndent = (indent: Indent) => {
+        // Navigate to damage detail for this indent
+        router.push(`/(site-engineer)/damages/${indent.id}?type=indent` as any);
+    };
+
+    const handleViewDamageRecord = (record: DamageRecord) => {
+        router.push(`/(site-engineer)/damages/${record.indentId}?type=indent` as any);
+    };
+
     const renderDamageRecord = ({ item }: { item: DamageRecord }) => (
         <TouchableOpacity
-            onPress={() => router.push(`/(site-engineer)/damages/${item.id}` as any)}
+            onPress={() => handleViewDamageRecord(item)}
             activeOpacity={0.7}
         >
             <View style={[styles.card, item.status === 'DRAFT' && styles.draftCard]}>
@@ -126,6 +225,10 @@ export default function DamagesScreen() {
                 </View>
                 <View style={styles.cardFooter}>
                     <View style={styles.footerItem}>
+                        <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
+                        <Text style={styles.footerText}>{item.siteName}</Text>
+                    </View>
+                    <View style={styles.footerItem}>
                         <Ionicons name="alert-circle-outline" size={14} color={theme.colors.error} />
                         <Text style={styles.footerText}>{item.damageCount} damage(s)</Text>
                     </View>
@@ -138,31 +241,24 @@ export default function DamagesScreen() {
         </TouchableOpacity>
     );
 
-    const handleSelectIndentForNewDamage = async (indent: Indent) => {
-        setShowIndentPicker(false);
-        try {
-            // Create a new draft damage report
-            const damageReport = await damagesApi.create({
-                indentId: indent.id,
-                name: `Damage Report - ${indent.name || indent.indentNumber}`,
-                description: '',
-                isDraft: true,
-            });
-            // Navigate to the damage detail screen
-            router.push(`/(site-engineer)/damages/${damageReport.id}` as any);
-        } catch (error) {
-            console.error('Failed to create damage report:', error);
-        }
-    };
-
     const renderIndentOption = ({ item }: { item: Indent }) => (
         <TouchableOpacity
             style={styles.indentOption}
-            onPress={() => handleSelectIndentForNewDamage(item)}
+            onPress={() => handleSelectIndent(item)}
         >
-            <View>
+            <View style={{ flex: 1 }}>
                 <Text style={styles.indentOptionName}>{item.name || item.indentNumber}</Text>
                 <Text style={styles.indentOptionNumber}>{item.indentNumber}</Text>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                    <View style={styles.footerItem}>
+                        <Ionicons name="location-outline" size={12} color={theme.colors.textSecondary} />
+                        <Text style={[styles.footerText, { fontSize: 12 }]}>{item.site?.name}</Text>
+                    </View>
+                    <View style={styles.footerItem}>
+                        <Ionicons name="calendar-outline" size={12} color={theme.colors.textSecondary} />
+                        <Text style={[styles.footerText, { fontSize: 12 }]}>{formatDate(item.createdAt)}</Text>
+                    </View>
+                </View>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
         </TouchableOpacity>
@@ -176,39 +272,181 @@ export default function DamagesScreen() {
         );
     }
 
-    // Show indent picker overlay
-    if (showIndentPicker) {
+    // Indent Picker View (when Report Damage is clicked)
+    if (viewMode === 'indent-picker') {
         return (
             <View style={styles.container}>
+                {/* Header */}
                 <View style={styles.pickerHeader}>
-                    <TouchableOpacity onPress={() => setShowIndentPicker(false)}>
+                    <TouchableOpacity onPress={() => {
+                        setViewMode('damage-list');
+                        setSearchQuery('');
+                        clearFilters();
+                    }}>
                         <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
                     </TouchableOpacity>
                     <Text style={styles.pickerTitle}>Select Indent</Text>
                     <View style={{ width: 24 }} />
                 </View>
-                <FlatList
-                    data={purchasedIndents}
-                    keyExtractor={item => item.id}
-                    renderItem={renderIndentOption}
-                    contentContainerStyle={styles.list}
-                    ListEmptyComponent={
-                        <View style={styles.empty}>
-                            <Text style={styles.emptyText}>No purchased indents</Text>
-                            <Text style={styles.emptySubtext}>
-                                Only indents that have been purchased can have damage reports
-                            </Text>
+
+                {/* Search Bar with Filter */}
+                <View style={styles.searchRow}>
+                    <View style={styles.searchContainer}>
+                        <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search indents..."
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    <TouchableOpacity
+                        style={[styles.filterButton, activeFilter && styles.filterButtonActive]}
+                        onPress={() => setShowFilterModal(true)}
+                    >
+                        <Ionicons
+                            name="filter"
+                            size={22}
+                            color={activeFilter ? '#FFFFFF' : theme.colors.primary}
+                        />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Active Filter Banner */}
+                {activeFilter && (
+                    <View style={styles.activeFilterBanner}>
+                        <Ionicons name="calendar" size={16} color={theme.colors.primary} />
+                        <Text style={styles.activeFilterText}>
+                            {fromDate && toDate
+                                ? `${formatFilterDate(fromDate)} - ${formatFilterDate(toDate)}`
+                                : fromDate
+                                    ? `From ${formatFilterDate(fromDate)}`
+                                    : `Until ${formatFilterDate(toDate)}`
+                            }
+                        </Text>
+                        <TouchableOpacity onPress={clearFilters}>
+                            <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {loadingIndents ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                    </View>
+                ) : (
+                    <FlatList
+                        data={filteredIndents}
+                        keyExtractor={item => item.id}
+                        renderItem={renderIndentOption}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={
+                            <View style={styles.empty}>
+                                <Ionicons name="document-text-outline" size={48} color={theme.colors.textSecondary} />
+                                <Text style={styles.emptyText}>No purchased indents</Text>
+                                <Text style={styles.emptySubtext}>
+                                    Only indents that have been purchased can have damage reports
+                                </Text>
+                            </View>
+                        }
+                    />
+                )}
+
+                {/* Date Filter Modal */}
+                <Modal
+                    visible={showFilterModal}
+                    animationType="slide"
+                    transparent
+                    onRequestClose={() => setShowFilterModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Filter by Date</Text>
+                                <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                                    <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.dateGroup}>
+                                <Text style={styles.dateLabel}>From Date</Text>
+                                <TouchableOpacity
+                                    style={styles.dateButton}
+                                    onPress={() => setShowFromPicker(true)}
+                                >
+                                    <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                                    <Text style={styles.dateButtonText}>{formatFilterDate(fromDate)}</Text>
+                                </TouchableOpacity>
+                                {fromDate && (
+                                    <TouchableOpacity style={styles.clearDateButton} onPress={() => setFromDate(null)}>
+                                        <Text style={styles.clearDateText}>Clear</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <View style={styles.dateGroup}>
+                                <Text style={styles.dateLabel}>To Date</Text>
+                                <TouchableOpacity
+                                    style={styles.dateButton}
+                                    onPress={() => setShowToPicker(true)}
+                                >
+                                    <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                                    <Text style={styles.dateButtonText}>{formatFilterDate(toDate)}</Text>
+                                </TouchableOpacity>
+                                {toDate && (
+                                    <TouchableOpacity style={styles.clearDateButton} onPress={() => setToDate(null)}>
+                                        <Text style={styles.clearDateText}>Clear</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            {showFromPicker && (
+                                <DateTimePicker
+                                    value={fromDate || new Date()}
+                                    mode="date"
+                                    display="default"
+                                    onChange={handleFromDateChange}
+                                    maximumDate={toDate || new Date()}
+                                />
+                            )}
+
+                            {showToPicker && (
+                                <DateTimePicker
+                                    value={toDate || new Date()}
+                                    mode="date"
+                                    display="default"
+                                    onChange={handleToDateChange}
+                                    minimumDate={fromDate || undefined}
+                                    maximumDate={new Date()}
+                                />
+                            )}
+
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+                                    <Text style={styles.clearButtonText}>Clear All</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.applyButton} onPress={applyFilters}>
+                                    <Text style={styles.applyButtonText}>Apply Filter</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                    }
-                />
+                    </View>
+                </Modal>
             </View>
         );
     }
 
-    // Show empty state or damage records
+    // Main Damage List View
     return (
         <View style={styles.container}>
             {damageRecords.length === 0 ? (
+                // Empty state with Report Damage button
                 <View style={styles.emptyState}>
                     <View style={styles.emptyIcon}>
                         <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
@@ -220,12 +458,20 @@ export default function DamagesScreen() {
                     <TouchableOpacity
                         style={styles.reportButton}
                         onPress={loadPurchasedIndents}
+                        disabled={loadingIndents}
                     >
-                        <Ionicons name="add-circle" size={24} color="#FFFFFF" />
-                        <Text style={styles.reportButtonText}>Report Damage</Text>
+                        {loadingIndents ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                        ) : (
+                            <>
+                                <Ionicons name="add-circle" size={24} color="#FFFFFF" />
+                                <Text style={styles.reportButtonText}>Report Damage</Text>
+                            </>
+                        )}
                     </TouchableOpacity>
                 </View>
             ) : (
+                // Damage records list
                 <>
                     <FlatList
                         data={damageRecords}
@@ -304,7 +550,8 @@ const styles = StyleSheet.create({
     },
     cardFooter: {
         flexDirection: 'row',
-        gap: 16,
+        flexWrap: 'wrap',
+        gap: 12,
     },
     footerItem: {
         flexDirection: 'row',
@@ -323,6 +570,7 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
         color: theme.colors.textPrimary,
+        marginTop: 16,
         marginBottom: 8,
     },
     emptySubtext: {
@@ -396,6 +644,60 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: theme.colors.textPrimary,
     },
+    searchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        paddingBottom: 8,
+        gap: 10,
+    },
+    searchContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.cardBg,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    searchInput: {
+        flex: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        fontSize: 16,
+        color: theme.colors.textPrimary,
+    },
+    filterButton: {
+        width: 46,
+        height: 46,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+    },
+    filterButtonActive: {
+        backgroundColor: theme.colors.primary,
+    },
+    activeFilterBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.primary + '15',
+        marginHorizontal: 16,
+        marginBottom: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        gap: 8,
+    },
+    activeFilterText: {
+        flex: 1,
+        fontSize: 13,
+        color: theme.colors.primary,
+        fontWeight: '500',
+    },
     indentOption: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -417,5 +719,91 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: theme.colors.textSecondary,
         fontFamily: 'monospace',
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: theme.colors.cardBg,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        paddingBottom: 40,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.textPrimary,
+    },
+    dateGroup: {
+        marginBottom: 20,
+    },
+    dateLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textPrimary,
+        marginBottom: 8,
+    },
+    dateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        gap: 10,
+    },
+    dateButtonText: {
+        fontSize: 16,
+        color: theme.colors.textPrimary,
+    },
+    clearDateButton: {
+        marginTop: 8,
+    },
+    clearDateText: {
+        fontSize: 14,
+        color: theme.colors.primary,
+        fontWeight: '500',
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 20,
+    },
+    clearButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+    },
+    clearButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    applyButton: {
+        flex: 2,
+        paddingVertical: 14,
+        borderRadius: 10,
+        backgroundColor: theme.colors.primary,
+        alignItems: 'center',
+    },
+    applyButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
     },
 });

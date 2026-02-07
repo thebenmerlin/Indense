@@ -8,9 +8,12 @@ import {
     RefreshControl,
     ActivityIndicator,
     TextInput,
+    Modal,
+    Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { indentsApi } from '../../../src/api';
 import { Indent } from '../../../src/types';
 
@@ -32,25 +35,52 @@ export default function ReceiptsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+
+    // Date filter state
+    const [showFilterModal, setShowFilterModal] = useState(false);
+    const [fromDate, setFromDate] = useState<Date | null>(null);
+    const [toDate, setToDate] = useState<Date | null>(null);
+    const [showFromPicker, setShowFromPicker] = useState(false);
+    const [showToPicker, setShowToPicker] = useState(false);
+    const [activeFilter, setActiveFilter] = useState(false);
+
     const router = useRouter();
 
-    const fetchApprovedIndents = useCallback(async () => {
+    const fetchPurchasedIndents = useCallback(async () => {
         try {
-            // Fetch indents that are fully approved (Director approved)
-            const response = await indentsApi.getAll({
-                limit: 100,
-                status: 'DIRECTOR_APPROVED'
+            // Fetch indents that are ordered/purchased (ORDER_PLACED, PARTIALLY_RECEIVED, FULLY_RECEIVED)
+            const [orderPlacedRes, partialRes, fullyReceivedRes] = await Promise.all([
+                indentsApi.getAll({ limit: 100, status: 'ORDER_PLACED' }),
+                indentsApi.getAll({ limit: 100, status: 'PARTIALLY_RECEIVED' }),
+                indentsApi.getAll({ limit: 100, status: 'FULLY_RECEIVED' }),
+            ]);
+
+            const allIndents = [
+                ...orderPlacedRes.data,
+                ...partialRes.data,
+                ...fullyReceivedRes.data,
+            ];
+
+            // Filter for indents that:
+            // 1. Have no unresolved damage reports (or no damage reports at all)
+            // 2. All items are marked as ARRIVED (not partial or not arrived)
+            const readyForReceipts = allIndents.filter(indent => {
+                // Check for unresolved damages
+                const hasDamages = (indent._count?.damageReports || 0) > 0;
+
+                // Check if all items arrived (all have arrivalStatus = 'ARRIVED')
+                const allItemsArrived = indent.items?.every(
+                    item => item.arrivalStatus === 'ARRIVED'
+                );
+
+                // Show indents that are purchased and either:
+                // - Have all items arrived with no damages, OR
+                // - Are fully received status (already confirmed)
+                return indent.status === 'FULLY_RECEIVED' ||
+                    (allItemsArrived && !hasDamages);
             });
 
-            // Also fetch ordered indents
-            const orderedResponse = await indentsApi.getAll({
-                limit: 100,
-                status: 'ORDERED'
-            });
-
-            const allApproved = [...response.data, ...orderedResponse.data];
-            setIndents(allApproved);
-            setFilteredIndents(allApproved);
+            setIndents(readyForReceipts);
         } catch (error) {
             console.error('Failed to fetch indents:', error);
         } finally {
@@ -60,25 +90,38 @@ export default function ReceiptsScreen() {
     }, []);
 
     useEffect(() => {
-        fetchApprovedIndents();
-    }, [fetchApprovedIndents]);
+        fetchPurchasedIndents();
+    }, [fetchPurchasedIndents]);
 
+    // Apply search and date filters
     useEffect(() => {
-        if (!searchQuery.trim()) {
-            setFilteredIndents(indents);
-        } else {
+        let result = [...indents];
+
+        // Apply search filter
+        if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
-            const filtered = indents.filter(
+            result = result.filter(
                 i => i.name?.toLowerCase().includes(query) ||
                     i.indentNumber.toLowerCase().includes(query)
             );
-            setFilteredIndents(filtered);
         }
-    }, [searchQuery, indents]);
+
+        // Apply date filter
+        if (fromDate) {
+            result = result.filter(i => new Date(i.createdAt) >= fromDate);
+        }
+        if (toDate) {
+            const endOfDay = new Date(toDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            result = result.filter(i => new Date(i.createdAt) <= endOfDay);
+        }
+
+        setFilteredIndents(result);
+    }, [searchQuery, indents, fromDate, toDate]);
 
     const onRefresh = () => {
         setRefreshing(true);
-        fetchApprovedIndents();
+        fetchPurchasedIndents();
     };
 
     const formatDate = (dateStr: string) => {
@@ -87,6 +130,41 @@ export default function ReceiptsScreen() {
             month: 'short',
             year: 'numeric',
         });
+    };
+
+    const formatFilterDate = (date: Date | null) => {
+        if (!date) return 'Select date';
+        return date.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
+    };
+
+    const handleFromDateChange = (event: any, selectedDate?: Date) => {
+        setShowFromPicker(Platform.OS === 'ios');
+        if (selectedDate) {
+            setFromDate(selectedDate);
+        }
+    };
+
+    const handleToDateChange = (event: any, selectedDate?: Date) => {
+        setShowToPicker(Platform.OS === 'ios');
+        if (selectedDate) {
+            setToDate(selectedDate);
+        }
+    };
+
+    const applyFilters = () => {
+        setActiveFilter(fromDate !== null || toDate !== null);
+        setShowFilterModal(false);
+    };
+
+    const clearFilters = () => {
+        setFromDate(null);
+        setToDate(null);
+        setActiveFilter(false);
+        setShowFilterModal(false);
     };
 
     const renderIndent = ({ item }: { item: Indent }) => (
@@ -138,22 +216,52 @@ export default function ReceiptsScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search indents..."
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                />
-                {searchQuery.length > 0 && (
-                    <TouchableOpacity onPress={() => setSearchQuery('')}>
-                        <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
-                    </TouchableOpacity>
-                )}
+            {/* Search Bar with Filter Button */}
+            <View style={styles.searchRow}>
+                <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search indents..."
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                    {searchQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchQuery('')}>
+                            <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+                <TouchableOpacity
+                    style={[styles.filterButton, activeFilter && styles.filterButtonActive]}
+                    onPress={() => setShowFilterModal(true)}
+                >
+                    <Ionicons
+                        name="filter"
+                        size={22}
+                        color={activeFilter ? '#FFFFFF' : theme.colors.primary}
+                    />
+                </TouchableOpacity>
             </View>
+
+            {/* Active Filter Indicator */}
+            {activeFilter && (
+                <View style={styles.activeFilterBanner}>
+                    <Ionicons name="calendar" size={16} color={theme.colors.primary} />
+                    <Text style={styles.activeFilterText}>
+                        {fromDate && toDate
+                            ? `${formatFilterDate(fromDate)} - ${formatFilterDate(toDate)}`
+                            : fromDate
+                                ? `From ${formatFilterDate(fromDate)}`
+                                : `Until ${formatFilterDate(toDate)}`
+                        }
+                    </Text>
+                    <TouchableOpacity onPress={clearFilters}>
+                        <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+            )}
 
             <FlatList
                 data={filteredIndents}
@@ -173,6 +281,95 @@ export default function ReceiptsScreen() {
                     </View>
                 }
             />
+
+            {/* Date Filter Modal */}
+            <Modal
+                visible={showFilterModal}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setShowFilterModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Filter by Date</Text>
+                            <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* From Date */}
+                        <View style={styles.dateGroup}>
+                            <Text style={styles.dateLabel}>From Date</Text>
+                            <TouchableOpacity
+                                style={styles.dateButton}
+                                onPress={() => setShowFromPicker(true)}
+                            >
+                                <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                                <Text style={styles.dateButtonText}>{formatFilterDate(fromDate)}</Text>
+                            </TouchableOpacity>
+                            {fromDate && (
+                                <TouchableOpacity
+                                    style={styles.clearDateButton}
+                                    onPress={() => setFromDate(null)}
+                                >
+                                    <Text style={styles.clearDateText}>Clear</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {/* To Date */}
+                        <View style={styles.dateGroup}>
+                            <Text style={styles.dateLabel}>To Date</Text>
+                            <TouchableOpacity
+                                style={styles.dateButton}
+                                onPress={() => setShowToPicker(true)}
+                            >
+                                <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                                <Text style={styles.dateButtonText}>{formatFilterDate(toDate)}</Text>
+                            </TouchableOpacity>
+                            {toDate && (
+                                <TouchableOpacity
+                                    style={styles.clearDateButton}
+                                    onPress={() => setToDate(null)}
+                                >
+                                    <Text style={styles.clearDateText}>Clear</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {showFromPicker && (
+                            <DateTimePicker
+                                value={fromDate || new Date()}
+                                mode="date"
+                                display="default"
+                                onChange={handleFromDateChange}
+                                maximumDate={toDate || new Date()}
+                            />
+                        )}
+
+                        {showToPicker && (
+                            <DateTimePicker
+                                value={toDate || new Date()}
+                                mode="date"
+                                display="default"
+                                onChange={handleToDateChange}
+                                minimumDate={fromDate || undefined}
+                                maximumDate={new Date()}
+                            />
+                        )}
+
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+                                <Text style={styles.clearButtonText}>Clear All</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.applyButton} onPress={applyFilters}>
+                                <Text style={styles.applyButtonText}>Apply Filter</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -187,12 +384,18 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    searchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        paddingBottom: 8,
+        gap: 10,
+    },
     searchContainer: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: theme.colors.cardBg,
-        margin: 16,
-        marginBottom: 8,
         paddingHorizontal: 12,
         borderRadius: 10,
         borderWidth: 1,
@@ -204,6 +407,36 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         fontSize: 16,
         color: theme.colors.textPrimary,
+    },
+    filterButton: {
+        width: 46,
+        height: 46,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+    },
+    filterButtonActive: {
+        backgroundColor: theme.colors.primary,
+    },
+    activeFilterBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.primary + '15',
+        marginHorizontal: 16,
+        marginBottom: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        gap: 8,
+    },
+    activeFilterText: {
+        flex: 1,
+        fontSize: 13,
+        color: theme.colors.primary,
+        fontWeight: '500',
     },
     list: {
         padding: 16,
@@ -294,5 +527,91 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.textSecondary,
         textAlign: 'center',
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: theme.colors.cardBg,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        paddingBottom: 40,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.textPrimary,
+    },
+    dateGroup: {
+        marginBottom: 20,
+    },
+    dateLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textPrimary,
+        marginBottom: 8,
+    },
+    dateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        gap: 10,
+    },
+    dateButtonText: {
+        fontSize: 16,
+        color: theme.colors.textPrimary,
+    },
+    clearDateButton: {
+        marginTop: 8,
+    },
+    clearDateText: {
+        fontSize: 14,
+        color: theme.colors.primary,
+        fontWeight: '500',
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 20,
+    },
+    clearButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+    },
+    clearButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    applyButton: {
+        flex: 2,
+        paddingVertical: 14,
+        borderRadius: 10,
+        backgroundColor: theme.colors.primary,
+        alignItems: 'center',
+    },
+    applyButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
     },
 });

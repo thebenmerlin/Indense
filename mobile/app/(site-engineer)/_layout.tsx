@@ -27,12 +27,24 @@ export default function SiteEngineerLayout() {
                 options={{ title: 'Indent Details' }}
             />
             <Stack.Screen
-                name="receipts"
-                options={{ title: 'Confirm Receipt' }}
+                name="receipts/index"
+                options={{ title: 'Confirm Receipts' }}
             />
             <Stack.Screen
-                name="damages"
+                name="receipts/[id]"
+                options={{ title: 'Add Receipt' }}
+            />
+            <Stack.Screen
+                name="damages/index"
                 options={{ title: 'Report Damage' }}
+            />
+            <Stack.Screen
+                name="damages/[id]"
+                options={{ title: 'Damage Details' }}
+            />
+            <Stack.Screen
+                name="account"
+                options={{ title: 'Profile' }}
             />
         </Stack>
     );
