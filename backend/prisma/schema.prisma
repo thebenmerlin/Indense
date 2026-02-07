@@ -370,6 +370,7 @@ model IndentItem {
   // Relations
   receiptItems  ReceiptItem[]
   damageReports DamageReport[]
+  orderItems    OrderItem[]
 
   @@index([indentId])
   @@index([materialId])
@@ -444,6 +445,10 @@ model OrderItem {
   orderId String
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  // Link to the original indent item
+  indentItemId String?
+  indentItem   IndentItem? @relation(fields: [indentItemId], references: [id])
+
   // Material details (copied from indent item for reference)
   materialName   String
   materialCode   String
@@ -461,10 +466,14 @@ model OrderItem {
   vendorContactPhone     String?
   vendorNatureOfBusiness String?
 
+  // Reorder tracking for damaged materials
+  isReordered Boolean @default(false)
+
   // Relations
   invoices OrderItemInvoice[]
 
   @@index([orderId])
+  @@index([indentItemId])
 }
 
 // Invoice attached to an order

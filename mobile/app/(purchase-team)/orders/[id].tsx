@@ -278,14 +278,21 @@ export default function ProcessOrder() {
                         return (
                             <TouchableOpacity
                                 key={item.id}
-                                style={styles.materialCard}
+                                style={[styles.materialCard, item.isReordered && { borderColor: theme.colors.warning, borderWidth: 2 }]}
                                 onPress={() => openMaterialModal(item)}
                             >
                                 <View style={styles.materialStatus}>
                                     <Ionicons name={status.icon as any} size={20} color={status.color} />
                                 </View>
                                 <View style={styles.materialInfo}>
-                                    <Text style={styles.materialName}>{item.materialName}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <Text style={styles.materialName}>{item.materialName}</Text>
+                                        {item.isReordered && (
+                                            <View style={{ backgroundColor: theme.colors.warning + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
+                                                <Text style={{ color: theme.colors.warning, fontSize: 10, fontWeight: '700' }}>NEEDS REPURCHASE</Text>
+                                            </View>
+                                        )}
+                                    </View>
                                     <Text style={styles.materialCode}>{item.materialCode}</Text>
                                     {item.vendorName && (
                                         <Text style={styles.vendorPreview}>
@@ -366,7 +373,7 @@ export default function ProcessOrder() {
                                             placeholder="Enter vendor name"
                                             value={itemForm.vendorName}
                                             onChangeText={(text) => setItemForm({ ...itemForm, vendorName: text })}
-                                            editable={!isPurchased}
+                                            editable={!isPurchased || selectedItem?.isReordered}
                                         />
                                     </View>
                                     <View style={styles.formGroup}>
@@ -377,7 +384,7 @@ export default function ProcessOrder() {
                                             value={itemForm.vendorAddress}
                                             onChangeText={(text) => setItemForm({ ...itemForm, vendorAddress: text })}
                                             multiline
-                                            editable={!isPurchased}
+                                            editable={!isPurchased || selectedItem?.isReordered}
                                         />
                                     </View>
                                     <View style={styles.formGroup}>
@@ -387,7 +394,7 @@ export default function ProcessOrder() {
                                             placeholder="Enter GST number"
                                             value={itemForm.vendorGstNo}
                                             onChangeText={(text) => setItemForm({ ...itemForm, vendorGstNo: text })}
-                                            editable={!isPurchased}
+                                            editable={!isPurchased || selectedItem?.isReordered}
                                         />
                                     </View>
                                     <View style={styles.formGroup}>
@@ -397,7 +404,7 @@ export default function ProcessOrder() {
                                             placeholder="Enter contact person name"
                                             value={itemForm.vendorContactPerson}
                                             onChangeText={(text) => setItemForm({ ...itemForm, vendorContactPerson: text })}
-                                            editable={!isPurchased}
+                                            editable={!isPurchased || selectedItem?.isReordered}
                                         />
                                     </View>
                                     <View style={styles.formGroup}>
@@ -408,7 +415,7 @@ export default function ProcessOrder() {
                                             value={itemForm.vendorContactPhone}
                                             onChangeText={(text) => setItemForm({ ...itemForm, vendorContactPhone: text })}
                                             keyboardType="phone-pad"
-                                            editable={!isPurchased}
+                                            editable={!isPurchased || selectedItem?.isReordered}
                                         />
                                     </View>
                                     <View style={styles.formGroup}>
@@ -418,7 +425,7 @@ export default function ProcessOrder() {
                                             placeholder="e.g., Building Materials Supplier"
                                             value={itemForm.vendorNatureOfBusiness}
                                             onChangeText={(text) => setItemForm({ ...itemForm, vendorNatureOfBusiness: text })}
-                                            editable={!isPurchased}
+                                            editable={!isPurchased || selectedItem?.isReordered}
                                         />
                                     </View>
                                 </View>
@@ -435,7 +442,7 @@ export default function ProcessOrder() {
                                                 value={itemForm.rate}
                                                 onChangeText={(text) => setItemForm({ ...itemForm, rate: text })}
                                                 keyboardType="decimal-pad"
-                                                editable={!isPurchased}
+                                                editable={!isPurchased || selectedItem?.isReordered}
                                             />
                                         </View>
                                         <View style={[styles.formGroup, { flex: 1, marginLeft: 12 }]}>
@@ -446,7 +453,7 @@ export default function ProcessOrder() {
                                                 value={itemForm.quantity}
                                                 onChangeText={(text) => setItemForm({ ...itemForm, quantity: text })}
                                                 keyboardType="decimal-pad"
-                                                editable={!isPurchased}
+                                                editable={!isPurchased || selectedItem?.isReordered}
                                             />
                                         </View>
                                     </View>
@@ -485,7 +492,7 @@ export default function ProcessOrder() {
                                 </View>
 
                                 {/* Save Button */}
-                                {!isPurchased && (
+                                {(!isPurchased || selectedItem?.isReordered) && (
                                     <TouchableOpacity
                                         style={styles.saveButton}
                                         onPress={handleSaveItem}

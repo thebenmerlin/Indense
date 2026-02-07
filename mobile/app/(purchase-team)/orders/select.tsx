@@ -92,6 +92,7 @@ export default function SelectIndentForOrder() {
             const order = await ordersApi.create({
                 indentId: indent.id,
                 items: (indent.items || []).map(item => ({
+                    indentItemId: item.id, // Link to source indent item for damage reorder tracking
                     materialName: item.material?.name || 'Unknown',
                     materialCode: item.material?.code || '',
                     specifications: item.material?.specifications ? JSON.stringify(item.material.specifications) : null,

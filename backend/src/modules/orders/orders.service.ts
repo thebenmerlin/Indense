@@ -33,9 +33,9 @@ class OrdersService {
     }
 
     async findAll(
-        params: { 
-            page?: number; 
-            limit?: number; 
+        params: {
+            page?: number;
+            limit?: number;
             siteId?: string;
             isPurchased?: boolean;
             fromDate?: Date;
@@ -87,12 +87,12 @@ class OrdersService {
         const order = await prisma.order.findUnique({
             where: { id },
             include: {
-                indent: { 
-                    include: { 
-                        site: true, 
+                indent: {
+                    include: {
+                        site: true,
                         items: { include: { material: true } },
                         createdBy: { select: { name: true, email: true } },
-                    } 
+                    }
                 },
                 orderItems: { include: { invoices: true } },
                 invoices: true,
@@ -148,6 +148,7 @@ class OrdersService {
                     createdById: userId,
                     orderItems: {
                         create: data.items.map((item) => ({
+                            indentItemId: item.indentItemId,
                             materialName: item.materialName,
                             materialCode: item.materialCode,
                             specifications: item.specifications,

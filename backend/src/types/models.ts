@@ -173,6 +173,7 @@ export interface RejectIndentDto {
 
 // Order DTOs
 export interface OrderItemInput {
+    indentItemId?: string; // Link to source indent item for reorder tracking
     materialName: string;
     materialCode: string;
     specifications?: Record<string, string>;

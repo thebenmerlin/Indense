@@ -46,7 +46,7 @@ class ReturnsService {
         if (params.status) {
             where.status = params.status;
         }
-        
+
         // Site filtering
         if (userRole === Role.SITE_ENGINEER && userSiteId) {
             where.siteId = userSiteId;
@@ -168,7 +168,7 @@ class ReturnsService {
                 status: data.isDraft ? DamageStatus.DRAFT : DamageStatus.REPORTED,
                 submittedAt: data.isDraft ? null : new Date(),
             },
-            include: { 
+            include: {
                 indentItem: { include: { material: true } },
                 images: true,
             },
@@ -230,7 +230,7 @@ class ReturnsService {
                 description: data.description,
                 severity: data.severity,
             },
-            include: { 
+            include: {
                 indentItem: { include: { material: true } },
                 images: true,
             },
@@ -262,7 +262,7 @@ class ReturnsService {
                 status: DamageStatus.REPORTED,
                 submittedAt: new Date(),
             },
-            include: { 
+            include: {
                 indentItem: { include: { material: true } },
                 images: true,
             },
@@ -367,7 +367,7 @@ class ReturnsService {
     }
 
     async resolveDamage(id: string, userId: string, resolution: string): Promise<unknown> {
-        const report = await prisma.damageReport.findUnique({ 
+        const report = await prisma.damageReport.findUnique({
             where: { id },
             include: { indent: true, reportedBy: true },
         });
@@ -402,15 +402,67 @@ class ReturnsService {
 
     /**
      * Mark a damage report as reordered by Purchase Team
+     * Clears vendor details, cost, and invoices from the order item for repurchase
      */
     async reorderDamage(id: string, userId: string, expectedDeliveryDate: Date): Promise<unknown> {
         const report = await prisma.damageReport.findUnique({
             where: { id },
-            include: { indent: true, reportedBy: true, indentItem: { include: { material: true } } },
+            include: {
+                indent: { include: { order: { include: { orderItems: true } } } },
+                reportedBy: true,
+                indentItem: { include: { material: true } }
+            },
         });
         if (!report) throw new NotFoundError('Damage report not found');
         if (report.isResolved) throw new BadRequestError('Cannot reorder a resolved damage report');
         if (report.isReordered) throw new BadRequestError('Material already reordered for this damage report');
+
+        // Find the order item for this indent item to clear its data
+        const order = report.indent.order;
+        let orderItemId: string | null = null;
+
+        if (order && report.indentItemId) {
+            const orderItem = order.orderItems.find(oi => oi.indentItemId === report.indentItemId);
+            if (orderItem) {
+                orderItemId = orderItem.id;
+
+                // Clear order item vendor details, cost, and mark as needs repurchase
+                await prisma.orderItem.update({
+                    where: { id: orderItem.id },
+                    data: {
+                        vendorName: null,
+                        vendorAddress: null,
+                        vendorGstNo: null,
+                        vendorContactPerson: null,
+                        vendorContactPhone: null,
+                        vendorNatureOfBusiness: null,
+                        unitPrice: null,
+                        totalPrice: null,
+                        isReordered: true,
+                    },
+                });
+
+                // Delete all invoices for this order item
+                const invoices = await prisma.orderItemInvoice.findMany({
+                    where: { orderItemId: orderItem.id },
+                });
+
+                for (const invoice of invoices) {
+                    // Delete the file
+                    try {
+                        if (fs.existsSync(invoice.path)) {
+                            fs.unlinkSync(invoice.path);
+                        }
+                    } catch (e) {
+                        console.error(`Failed to delete invoice file: ${invoice.path}`, e);
+                    }
+                }
+
+                await prisma.orderItemInvoice.deleteMany({
+                    where: { orderItemId: orderItem.id },
+                });
+            }
+        }
 
         const updated = await prisma.damageReport.update({
             where: { id },
@@ -442,7 +494,7 @@ class ReturnsService {
             action: AuditAction.DAMAGE_RESOLVED, // Using existing action type
             entityType: EntityType.DAMAGE_REPORT,
             entityId: id,
-            metadata: { action: 'reorder', expectedDeliveryDate },
+            metadata: { action: 'reorder', expectedDeliveryDate, orderItemCleared: !!orderItemId },
         });
 
         return updated;
@@ -569,7 +621,7 @@ class ReturnsService {
         const pag = parsePaginationParams(params);
         const where: Record<string, unknown> = {};
         if (params.status) where.status = params.status;
-        
+
         // Site filtering
         if (userRole === Role.SITE_ENGINEER && userSiteId) {
             where.siteId = userSiteId;

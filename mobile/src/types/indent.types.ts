@@ -307,6 +307,8 @@ export interface OrderItem {
     vendorContactPerson: string | null;
     vendorContactPhone: string | null;
     vendorNatureOfBusiness: string | null;
+    // Reorder tracking
+    isReordered?: boolean;
     // Relations
     indentItem?: IndentItem | null;
     invoices?: OrderItemInvoice[];
