@@ -84,17 +84,29 @@ export default function MaterialDetail() {
         }
         setSaving(true);
         try {
-            // NOTE: If backend has update endpoint, use it. For now we show success.
-            // The backend currently only has create, not update endpoint.
-            Alert.alert('Info', 'Material update API not yet implemented', [
-                { text: 'OK', onPress: () => setEditMode(false) }
-            ]);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to update material');
+            await materialsApi.update(id!, {
+                name: name.trim(),
+                code: code.trim() || undefined,
+                specification: specification.trim() || undefined,
+                dimensions: dimensions.trim() || undefined,
+                color: color.trim() || undefined,
+                itemGroupId: selectedCategoryId || undefined,
+                unitId: selectedUnitId || undefined,
+            });
+
+            // Refresh material data
+            await fetchData();
+            setEditMode(false);
+            Alert.alert('Success', 'Material updated successfully');
+        } catch (error: any) {
+            console.error('Failed to update material:', error);
+            const message = error?.response?.data?.message || 'Failed to update material';
+            Alert.alert('Error', message);
         } finally {
             setSaving(false);
         }
     };
+
 
     const handleCancel = () => {
         if (material) {

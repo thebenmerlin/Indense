@@ -55,9 +55,12 @@ export default function PendingIndentsList() {
 
     const fetchIndents = useCallback(async () => {
         try {
-            // Director sees PT_APPROVED (awaiting director approval) and ON_HOLD indents
+            // Director sees:
+            // - SUBMITTED (new indents - director can approve directly, bypassing PT)
+            // - PURCHASE_APPROVED (PT approved, awaiting director approval)
+            // - ON_HOLD indents
             const response = await indentsApi.getAll({
-                status: ['PT_APPROVED', 'ON_HOLD'],
+                status: ['SUBMITTED', 'PURCHASE_APPROVED', 'ON_HOLD'],
                 siteId: siteFilter !== 'all' ? siteFilter : undefined,
                 fromDate: dateFilter ? dateFilter.toISOString().split('T')[0] : undefined,
                 limit: 50,
@@ -98,7 +101,8 @@ export default function PendingIndentsList() {
     const getStatusColor = (status: string, isOnHold?: boolean) => {
         if (isOnHold) return theme.colors.warning;
         switch (status) {
-            case 'PT_APPROVED': return theme.colors.success;
+            case 'SUBMITTED': return theme.colors.warning;
+            case 'PURCHASE_APPROVED': return theme.colors.success;
             case 'DIRECTOR_APPROVED': return theme.colors.success;
             default: return theme.colors.textSecondary;
         }
@@ -107,9 +111,10 @@ export default function PendingIndentsList() {
     const getStatusLabel = (status: string, isOnHold?: boolean) => {
         if (isOnHold) return 'On Hold';
         switch (status) {
-            case 'PT_APPROVED': return 'PT Approved';
+            case 'SUBMITTED': return 'New';
+            case 'PURCHASE_APPROVED': return 'PT Approved';
             case 'DIRECTOR_APPROVED': return 'Approved';
-            default: return 'Pending';
+            default: return status;
         }
     };
 
@@ -168,21 +173,6 @@ export default function PendingIndentsList() {
 
     return (
         <View style={styles.container}>
-            {/* Navigation to other indent sections */}
-            <View style={styles.navTabs}>
-                <TouchableOpacity style={[styles.navTab, styles.navTabActive]}>
-                    <Text style={[styles.navTabText, styles.navTabTextActive]}>Pending</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/all' as any)}>
-                    <Text style={styles.navTabText}>All</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/damaged' as any)}>
-                    <Text style={styles.navTabText}>Damaged</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/partial' as any)}>
-                    <Text style={styles.navTabText}>Partial</Text>
-                </TouchableOpacity>
-            </View>
 
             {/* Filters */}
             <View style={styles.filters}>

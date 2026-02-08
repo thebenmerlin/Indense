@@ -46,9 +46,15 @@ export interface CreateMaterialPayload {
     dimensions?: string;
     color?: string;
     code?: string;
-    uomId: string;
-    itemGroupId: string;
+    // Either provide IDs OR names - backend will find or create from names
+    itemGroupId?: string;    // Category ID (optional if categoryName provided)
+    unitId?: string;         // Unit ID (optional if unitName provided)
+    categoryName?: string;   // Category name - will find or create
+    unitName?: string;       // Unit name - will find or create
+    unitCode?: string;       // Unit abbreviation
 }
+
+
 
 export interface PaginatedResponse<T> {
     data: T[];
@@ -124,6 +130,22 @@ export const materialsApi = {
      */
     async create(data: CreateMaterialPayload): Promise<Material> {
         const response = await apiClient.post('/materials', data);
+        return response.data.data;
+    },
+
+    /**
+     * Update an existing material (Director only)
+     */
+    async update(id: string, data: {
+        name?: string;
+        code?: string;
+        specification?: string;
+        dimensions?: string;
+        color?: string;
+        itemGroupId?: string;
+        unitId?: string;
+    }): Promise<Material> {
+        const response = await apiClient.put(`/materials/${id}`, data);
         return response.data.data;
     },
 };

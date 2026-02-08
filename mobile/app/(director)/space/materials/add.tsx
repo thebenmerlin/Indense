@@ -135,49 +135,35 @@ export default function AddMaterial() {
             return;
         }
 
-        // Find matching category and unit if not already selected
-        let finalCategoryId = selectedCategoryId;
-        let finalUnitId = selectedUnitId;
+        // Build payload - pass IDs if available, otherwise pass names for backend to find/create
+        const payload: any = {
+            name: name.trim(),
+            specification: specification.trim() || undefined,
+            dimensions: dimensions.trim() || undefined,
+            color: color.trim() || undefined,
+        };
 
-        if (!finalCategoryId) {
-            const matchedCategory = categories.find(c =>
-                c.name.toLowerCase() === category.toLowerCase()
-            );
-            finalCategoryId = matchedCategory?.id || null;
+        // Category - use ID if selected, otherwise use name
+        if (selectedCategoryId) {
+            payload.itemGroupId = selectedCategoryId;
+        } else {
+            payload.categoryName = category.trim();
         }
 
-        if (!finalUnitId) {
-            const matchedUnit = units.find(u =>
-                u.name.toLowerCase() === unit.toLowerCase() ||
-                u.abbreviation.toLowerCase() === unit.toLowerCase() ||
-                `${u.name} (${u.abbreviation})`.toLowerCase() === unit.toLowerCase()
-            );
-            finalUnitId = matchedUnit?.id || null;
-        }
-
-        // If no matching IDs found, show error
-        if (!finalCategoryId) {
-            Alert.alert('Invalid Category', 'Please select a category from the suggestions or enter an existing category name.');
-            return;
-        }
-        if (!finalUnitId) {
-            Alert.alert('Invalid Unit', 'Please select a unit from the suggestions or enter an existing unit name.');
-            return;
+        // Unit - use ID if selected, otherwise use name
+        if (selectedUnitId) {
+            payload.unitId = selectedUnitId;
+        } else {
+            payload.unitName = unit.trim();
         }
 
         setSaving(true);
         try {
-            await materialsApi.create({
-                name: name.trim(),
-                specification: specification.trim() || undefined,
-                dimensions: dimensions.trim() || undefined,
-                color: color.trim() || undefined,
-                itemGroupId: finalCategoryId,
-                uomId: finalUnitId,
-            });
+            await materialsApi.create(payload);
             Alert.alert('Success', 'Material added successfully', [
                 { text: 'OK', onPress: () => router.back() }
             ]);
+
         } catch (error: any) {
             console.error('Failed to create material:', error);
             const message = error?.response?.data?.message || 'Failed to add material';

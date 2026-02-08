@@ -1,121 +1,92 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
     View,
     Text,
     StyleSheet,
-    FlatList,
+    ScrollView,
     TouchableOpacity,
-    RefreshControl,
-    ActivityIndicator,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { indentsApi } from '../../../src/api';
-import { Indent } from '../../../src/types';
-import { IndentStatus, STATUS_LABELS, STATUS_COLORS } from '../../../src/constants';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 const theme = {
     colors: {
-        surface: '#F9FAFB',
-        cardBg: '#FFFFFF',
-        textPrimary: '#111827',
-        textSecondary: '#6B7280',
         primary: '#1E3A8A',
+        surface: '#F8FAFC',
+        cardBg: '#FFFFFF',
+        textPrimary: '#0F172A',
+        textSecondary: '#64748B',
+        border: '#E2E8F0',
+        accent: '#3B82F6',
+        warning: '#F59E0B',
+        danger: '#EF4444',
+        success: '#10B981',
     }
 };
 
-export default function DirectorIndentsList() {
-    const { status } = useLocalSearchParams<{ status?: string }>();
-    const [indents, setIndents] = useState<Indent[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+interface MenuButtonProps {
+    title: string;
+    subtitle: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    color: string;
+    onPress: () => void;
+}
+
+const MenuButton = ({ title, subtitle, icon, color, onPress }: MenuButtonProps) => (
+    <TouchableOpacity style={styles.menuButton} onPress={onPress} activeOpacity={0.7}>
+        <View style={[styles.iconBox, { backgroundColor: color + '15' }]}>
+            <Ionicons name={icon} size={28} color={color} />
+        </View>
+        <View style={styles.buttonContent}>
+            <Text style={styles.buttonTitle}>{title}</Text>
+            <Text style={styles.buttonSubtitle}>{subtitle}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color={theme.colors.textSecondary} />
+    </TouchableOpacity>
+);
+
+export default function IndentsMenu() {
     const router = useRouter();
-
-    const fetchIndents = async () => {
-        try {
-            const response = await indentsApi.getAll({
-                limit: 50,
-                status: status as IndentStatus | undefined,
-            });
-            setIndents(response.data);
-        } catch (error) {
-            console.error('Failed to fetch indents:', error);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchIndents();
-    }, [status]);
-
-    const onRefresh = () => {
-        setRefreshing(true);
-        fetchIndents();
-    };
-
-    const StatusBadge = ({ indentStatus }: { indentStatus: IndentStatus }) => {
-        const bgColor = STATUS_COLORS[indentStatus] + '20';
-        const textColor = STATUS_COLORS[indentStatus];
-        return (
-            <View style={[styles.badge, { backgroundColor: bgColor }]}>
-                <Text style={[styles.badgeText, { color: textColor }]}>
-                    {STATUS_LABELS[indentStatus]}
-                </Text>
-            </View>
-        );
-    };
-
-    const renderIndent = ({ item }: { item: Indent }) => (
-        <TouchableOpacity
-            onPress={() => router.push(`/(director)/indents/${item.id}` as any)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Text style={styles.indentNumber}>{item.indentNumber}</Text>
-                    <StatusBadge indentStatus={item.status} />
-                </View>
-                <Text style={styles.siteName}>{item.site?.name}</Text>
-                <Text style={styles.itemCount}>
-                    {item.items?.length || 0} items • {item.createdBy?.name}
-                </Text>
-                <Text style={styles.date}>
-                    {new Date(item.createdAt).toLocaleDateString()}
-                </Text>
-            </View>
-        </TouchableOpacity>
-    );
-
-    if (loading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.colors.primary} />
-            </View>
-        );
-    }
 
     return (
         <View style={styles.container}>
-            {status && (
-                <View style={styles.filterBar}>
-                    <Text style={styles.filterText}>Showing: {STATUS_LABELS[status as IndentStatus]}</Text>
-                </View>
-            )}
-            <FlatList
-                data={indents}
-                keyExtractor={(item) => item.id}
-                renderItem={renderIndent}
-                contentContainerStyle={styles.list}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <Text style={styles.emptyText}>No indents found</Text>
-                    </View>
-                }
-            />
+            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+                <Text style={styles.sectionTitle}>Indent Management</Text>
+
+                <MenuButton
+                    title="Pending Approvals"
+                    subtitle="Indents awaiting your approval"
+                    icon="time-outline"
+                    color={theme.colors.warning}
+                    onPress={() => router.push('/(director)/indents/pending' as any)}
+                />
+
+                <MenuButton
+                    title="All Indents"
+                    subtitle="View and manage all indents"
+                    icon="document-text-outline"
+                    color={theme.colors.accent}
+                    onPress={() => router.push('/(director)/indents/all' as any)}
+                />
+
+                <MenuButton
+                    title="Damaged Orders"
+                    subtitle="Orders with reported damages"
+                    icon="alert-circle-outline"
+                    color={theme.colors.danger}
+                    onPress={() => router.push('/(director)/indents/damaged' as any)}
+                />
+
+                <MenuButton
+                    title="Partially Received"
+                    subtitle="Orders with pending deliveries"
+                    icon="cube-outline"
+                    color={theme.colors.success}
+                    onPress={() => router.push('/(director)/indents/partial' as any)}
+                />
+
+                <View style={{ height: 40 }} />
+            </ScrollView>
         </View>
     );
 }
@@ -125,77 +96,50 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.surface,
     },
-    loadingContainer: {
+    scrollView: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    filterBar: {
-        backgroundColor: theme.colors.cardBg,
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
-    },
-    filterText: {
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        fontWeight: '500',
-    },
-    list: {
         padding: 16,
     },
-    card: {
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 16,
+    },
+    menuButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
+        borderRadius: 14,
         padding: 16,
         marginBottom: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
         elevation: 2,
     },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    indentNumber: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.textPrimary,
-    },
-    badge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
+    iconBox: {
+        width: 52,
+        height: 52,
         borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
     },
-    badgeText: {
-        fontSize: 12,
+    buttonContent: {
+        flex: 1,
+    },
+    buttonTitle: {
+        fontSize: 17,
         fontWeight: '600',
-    },
-    siteName: {
-        fontSize: 14,
-        fontWeight: '500',
         color: theme.colors.textPrimary,
-        marginBottom: 4,
     },
-    itemCount: {
+    buttonSubtitle: {
         fontSize: 13,
         color: theme.colors.textSecondary,
-        marginBottom: 4,
-    },
-    date: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    empty: {
-        padding: 32,
-        alignItems: 'center',
-    },
-    emptyText: {
-        fontSize: 16,
-        color: theme.colors.textSecondary,
+        marginTop: 2,
     },
 });

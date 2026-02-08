@@ -1,12 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
+    TouchableOpacity,
     ActivityIndicator,
+    Alert,
+    RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
+import { useFocusEffect } from '@react-navigation/native';
+import { reportsApi, FinancialReportRow } from '../../../src/api';
 
 const theme = {
     colors: {
@@ -21,57 +27,88 @@ const theme = {
     }
 };
 
-interface FinancialData {
-    totalSpend: number;
-    thisMonth: number;
-    lastMonth: number;
-    monthlyTrend: { month: string; amount: number }[];
-    topCategories: { name: string; amount: number }[];
-}
+const currentYear = new Date().getFullYear();
+const months = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' },
+];
+const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
 export default function FinancialReport() {
-    const [data, setData] = useState<FinancialData | null>(null);
+    const [data, setData] = useState<FinancialReportRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    // Filter state
+    const [fromMonth, setFromMonth] = useState(1);
+    const [fromYear, setFromYear] = useState(currentYear);
+    const [toMonth, setToMonth] = useState(new Date().getMonth() + 1);
+    const [toYear, setToYear] = useState(currentYear);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+        }, [fromMonth, fromYear, toMonth, toYear])
+    );
+
+    const getDateRange = () => {
+        const fromDate = new Date(fromYear, fromMonth - 1, 1);
+        const toDate = new Date(toYear, toMonth, 0); // Last day of toMonth
+        return {
+            fromDate: fromDate.toISOString(),
+            toDate: toDate.toISOString(),
+        };
+    };
 
     const fetchData = async () => {
         try {
-            // TODO: Replace with actual API call
-            await new Promise(resolve => setTimeout(resolve, 500));
-            setData({
-                totalSpend: 4560000,
-                thisMonth: 560000,
-                lastMonth: 480000,
-                monthlyTrend: [
-                    { month: 'Jan', amount: 420000 },
-                    { month: 'Feb', amount: 480000 },
-                    { month: 'Mar', amount: 560000 },
-                ],
-                topCategories: [
-                    { name: 'Structural', amount: 1800000 },
-                    { name: 'Plumbing', amount: 850000 },
-                    { name: 'Electrical', amount: 720000 },
-                    { name: 'Finishing', amount: 650000 },
-                ],
-            });
+            setLoading(true);
+            const params = getDateRange();
+            const result = await reportsApi.getFinancialReport(params);
+            setData(result || []);
         } catch (error) {
-            console.error('Failed to fetch data:', error);
+            console.error('Failed to fetch financial report:', error);
+            Alert.alert('Error', 'Failed to load financial report');
         } finally {
             setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchData();
+    };
+
+    const handleExport = async () => {
+        setExporting(true);
+        try {
+            const params = getDateRange();
+            await reportsApi.downloadFinancialReport(params);
+            Alert.alert(
+                'Report Generated',
+                'Financial report has been generated successfully.',
+                [{ text: 'OK' }]
+            );
+        } catch (error) {
+            console.error('Failed to export:', error);
+            Alert.alert('Error', 'Failed to export report');
+        } finally {
+            setExporting(false);
         }
     };
 
     const formatCurrency = (amount: number) => {
-        if (amount >= 100000) {
-            return `₹${(amount / 100000).toFixed(1)}L`;
-        }
-        return `₹${(amount / 1000).toFixed(0)}K`;
+        return `₹${(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
     };
 
-    if (loading) {
+    const totalCost = data.reduce((sum, row) => sum + (row.cost || 0), 0);
+
+    if (loading && !refreshing) {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -79,149 +116,215 @@ export default function FinancialReport() {
         );
     }
 
-    if (!data) {
-        return (
-            <View style={styles.loadingContainer}>
-                <Text style={styles.errorText}>Failed to load data</Text>
-            </View>
-        );
-    }
-
-    const monthChange = ((data.thisMonth - data.lastMonth) / data.lastMonth) * 100;
-
     return (
-        <ScrollView style={styles.container}>
-            {/* Total Spend */}
-            <View style={styles.totalCard}>
-                <Text style={styles.totalLabel}>Total Spend</Text>
-                <Text style={styles.totalAmount}>{formatCurrency(data.totalSpend)}</Text>
-            </View>
+        <View style={styles.container}>
+            {/* Filter Toggle */}
+            <TouchableOpacity style={styles.filterToggle} onPress={() => setShowFilters(!showFilters)}>
+                <Ionicons name="filter" size={18} color={theme.colors.primary} />
+                <Text style={styles.filterToggleText}>Filters</Text>
+                <Ionicons name={showFilters ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.primary} />
+            </TouchableOpacity>
 
-            {/* Month Comparison */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Monthly Comparison</Text>
-                <View style={styles.comparisonCard}>
-                    <View style={styles.comparisonItem}>
-                        <Text style={styles.comparisonLabel}>This Month</Text>
-                        <Text style={styles.comparisonValue}>{formatCurrency(data.thisMonth)}</Text>
-                    </View>
-                    <View style={styles.divider} />
-                    <View style={styles.comparisonItem}>
-                        <Text style={styles.comparisonLabel}>Last Month</Text>
-                        <Text style={styles.comparisonValue}>{formatCurrency(data.lastMonth)}</Text>
-                    </View>
-                    <View style={styles.divider} />
-                    <View style={styles.comparisonItem}>
-                        <Text style={styles.comparisonLabel}>Change</Text>
-                        <View style={styles.changeRow}>
-                            <Ionicons
-                                name={monthChange >= 0 ? "arrow-up" : "arrow-down"}
-                                size={16}
-                                color={monthChange >= 0 ? theme.colors.warning : theme.colors.success}
-                            />
-                            <Text style={[styles.changeValue, { color: monthChange >= 0 ? theme.colors.warning : theme.colors.success }]}>
-                                {Math.abs(monthChange).toFixed(1)}%
-                            </Text>
+            {/* Filters Panel */}
+            {showFilters && (
+                <View style={styles.filtersPanel}>
+                    <Text style={styles.filterLabel}>From</Text>
+                    <View style={styles.filterRow}>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={fromMonth} onValueChange={setFromMonth} style={styles.picker}>
+                                {months.map(m => <Picker.Item key={m.value} label={m.label} value={m.value} />)}
+                            </Picker>
+                        </View>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={fromYear} onValueChange={setFromYear} style={styles.picker}>
+                                {years.map(y => <Picker.Item key={y} label={String(y)} value={y} />)}
+                            </Picker>
                         </View>
                     </View>
+
+                    <Text style={styles.filterLabel}>To</Text>
+                    <View style={styles.filterRow}>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={toMonth} onValueChange={setToMonth} style={styles.picker}>
+                                {months.map(m => <Picker.Item key={m.value} label={m.label} value={m.value} />)}
+                            </Picker>
+                        </View>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={toYear} onValueChange={setToYear} style={styles.picker}>
+                                {years.map(y => <Picker.Item key={y} label={String(y)} value={y} />)}
+                            </Picker>
+                        </View>
+                    </View>
+
+                    <TouchableOpacity style={styles.applyButton} onPress={() => { setShowFilters(false); fetchData(); }}>
+                        <Text style={styles.applyButtonText}>Apply Filters</Text>
+                    </TouchableOpacity>
                 </View>
+            )}
+
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+                <Text style={[styles.headerCell, { flex: 2 }]}>Material</Text>
+                <Text style={[styles.headerCell, { flex: 1, textAlign: 'right' }]}>Rate</Text>
+                <Text style={[styles.headerCell, { flex: 1, textAlign: 'right' }]}>Qty</Text>
+                <Text style={[styles.headerCell, { flex: 1.2, textAlign: 'right' }]}>Cost</Text>
             </View>
 
-            {/* Monthly Trend */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Monthly Trend</Text>
-                <View style={styles.trendCard}>
-                    {data.monthlyTrend.map((item, index) => (
-                        <View key={index} style={styles.trendItem}>
-                            <View style={styles.trendBarContainer}>
-                                <View
-                                    style={[
-                                        styles.trendBar,
-                                        { height: `${(item.amount / Math.max(...data.monthlyTrend.map(t => t.amount))) * 100}%` }
-                                    ]}
-                                />
+            {/* Table Body */}
+            <ScrollView
+                style={styles.tableBody}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
+                {data.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <Ionicons name="document-text-outline" size={48} color={theme.colors.textSecondary} />
+                        <Text style={styles.emptyText}>No data found</Text>
+                        <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+                    </View>
+                ) : (
+                    data.map((row, index) => (
+                        <View key={index} style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}>
+                            <View style={{ flex: 2 }}>
+                                <Text style={styles.materialName} numberOfLines={1}>{row.materialName}</Text>
+                                <Text style={styles.materialCode}>{row.materialCode}</Text>
                             </View>
-                            <Text style={styles.trendMonth}>{item.month}</Text>
-                            <Text style={styles.trendAmount}>{formatCurrency(item.amount)}</Text>
+                            <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(row.rate)}</Text>
+                            <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{row.quantity}</Text>
+                            <Text style={[styles.cellBold, { flex: 1.2, textAlign: 'right' }]}>{formatCurrency(row.cost)}</Text>
                         </View>
-                    ))}
-                </View>
-            </View>
+                    ))
+                )}
 
-            {/* Top Categories */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Top Categories</Text>
-                {data.topCategories.map((cat, index) => (
-                    <View key={index} style={styles.categoryCard}>
-                        <View style={styles.categoryInfo}>
-                            <Text style={styles.categoryName}>{cat.name}</Text>
-                            <Text style={styles.categoryAmount}>{formatCurrency(cat.amount)}</Text>
-                        </View>
-                        <View style={styles.categoryBarBg}>
-                            <View
-                                style={[
-                                    styles.categoryBarFill,
-                                    { width: `${(cat.amount / data.topCategories[0].amount) * 100}%` }
-                                ]}
-                            />
-                        </View>
+                {/* Total Row */}
+                {data.length > 0 && (
+                    <View style={styles.totalRow}>
+                        <Text style={[styles.totalLabel, { flex: 4 }]}>TOTAL</Text>
+                        <Text style={[styles.totalValue, { flex: 1.2, textAlign: 'right' }]}>{formatCurrency(totalCost)}</Text>
                     </View>
-                ))}
-            </View>
+                )}
 
-            <View style={{ height: 40 }} />
-        </ScrollView>
+                <View style={{ height: 100 }} />
+            </ScrollView>
+
+            {/* Export Button */}
+            <View style={styles.exportContainer}>
+                <TouchableOpacity
+                    style={styles.exportButton}
+                    onPress={handleExport}
+                    disabled={exporting || data.length === 0}
+                >
+                    {exporting ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                        <>
+                            <Ionicons name="download-outline" size={20} color="#FFFFFF" />
+                            <Text style={styles.exportButtonText}>Export to Excel</Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+            </View>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    errorText: { fontSize: 16, color: theme.colors.textSecondary },
-    totalCard: {
+    filterToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: theme.colors.cardBg,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: 8,
+    },
+    filterToggleText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary, flex: 1 },
+    filtersPanel: {
+        backgroundColor: theme.colors.cardBg,
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    filterLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 6, marginTop: 12 },
+    filterRow: { flexDirection: 'row', gap: 12 },
+    pickerContainer: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        backgroundColor: theme.colors.surface,
+        overflow: 'hidden',
+    },
+    sitePickerContainer: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        backgroundColor: theme.colors.surface,
+        overflow: 'hidden',
+    },
+    picker: { height: 50 },
+    applyButton: {
         backgroundColor: theme.colors.primary,
-        padding: 24,
-        margin: 16,
-        borderRadius: 16,
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginTop: 16,
+    },
+    applyButtonText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+    tableHeader: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.primary,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+    },
+    headerCell: { fontSize: 12, fontWeight: '700', color: '#FFFFFF', textTransform: 'uppercase' },
+    tableBody: { flex: 1 },
+    tableRow: {
+        flexDirection: 'row',
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        backgroundColor: theme.colors.cardBg,
         alignItems: 'center',
     },
-    totalLabel: { fontSize: 14, color: '#FFFFFF', opacity: 0.8 },
-    totalAmount: { fontSize: 40, fontWeight: '700', color: '#FFFFFF', marginTop: 4 },
-    section: { padding: 16, paddingTop: 0 },
-    sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 12 },
-    comparisonCard: {
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
-        padding: 16,
+    tableRowAlt: { backgroundColor: theme.colors.surface },
+    materialName: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
+    materialCode: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 2 },
+    cell: { fontSize: 13, color: theme.colors.textPrimary },
+    cellBold: { fontSize: 13, fontWeight: '600', color: theme.colors.success },
+    totalRow: {
         flexDirection: 'row',
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        backgroundColor: theme.colors.primary + '10',
+        borderTopWidth: 2,
+        borderTopColor: theme.colors.primary,
     },
-    comparisonItem: { flex: 1, alignItems: 'center' },
-    comparisonLabel: { fontSize: 12, color: theme.colors.textSecondary },
-    comparisonValue: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary, marginTop: 4 },
-    divider: { width: 1, backgroundColor: theme.colors.border },
-    changeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
-    changeValue: { fontSize: 18, fontWeight: '700' },
-    trendCard: {
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
+    totalLabel: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+    totalValue: { fontSize: 16, fontWeight: '700', color: theme.colors.success },
+    emptyState: { padding: 48, alignItems: 'center' },
+    emptyText: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 12 },
+    emptySubtext: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
+    exportContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
         padding: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-    },
-    trendItem: { alignItems: 'center' },
-    trendBarContainer: { height: 100, width: 30, justifyContent: 'flex-end' },
-    trendBar: { backgroundColor: theme.colors.primary, borderRadius: 4, width: '100%' },
-    trendMonth: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 8 },
-    trendAmount: { fontSize: 11, color: theme.colors.textPrimary, fontWeight: '600' },
-    categoryCard: {
         backgroundColor: theme.colors.cardBg,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    exportButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.success,
+        paddingVertical: 14,
         borderRadius: 10,
-        padding: 14,
-        marginBottom: 10,
+        gap: 8,
     },
-    categoryInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    categoryName: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
-    categoryAmount: { fontSize: 14, fontWeight: '600', color: theme.colors.success },
-    categoryBarBg: { height: 6, backgroundColor: theme.colors.border, borderRadius: 3, overflow: 'hidden' },
-    categoryBarFill: { height: '100%', backgroundColor: theme.colors.success, borderRadius: 3 },
+    exportButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
 });

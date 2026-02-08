@@ -41,11 +41,12 @@ export default function AllIndentsList() {
 
     const statusOptions = [
         { label: 'All', value: 'all' },
-        { label: 'Pending', value: 'PENDING' },
-        { label: 'PT Approved', value: 'PT_APPROVED' },
+        { label: 'Submitted', value: 'SUBMITTED' },
+        { label: 'PT Approved', value: 'PURCHASE_APPROVED' },
         { label: 'Director Approved', value: 'DIRECTOR_APPROVED' },
-        { label: 'Ordered', value: 'ORDERED' },
-        { label: 'Received', value: 'RECEIVED' },
+        { label: 'Order Placed', value: 'ORDER_PLACED' },
+        { label: 'Partially Received', value: 'PARTIALLY_RECEIVED' },
+        { label: 'Fully Received', value: 'FULLY_RECEIVED' },
         { label: 'Closed', value: 'CLOSED' },
         { label: 'Rejected', value: 'REJECTED' },
     ];
@@ -112,11 +113,12 @@ export default function AllIndentsList() {
     const getStatusLabel = (status: string, isOnHold?: boolean) => {
         if (isOnHold) return 'On Hold';
         switch (status) {
-            case 'PENDING': return 'Pending';
-            case 'PT_APPROVED': return 'PT Approved';
+            case 'SUBMITTED': return 'Submitted';
+            case 'PURCHASE_APPROVED': return 'PT Approved';
             case 'DIRECTOR_APPROVED': return 'Approved';
-            case 'ORDERED': return 'Ordered';
-            case 'RECEIVED': return 'Received';
+            case 'ORDER_PLACED': return 'Ordered';
+            case 'PARTIALLY_RECEIVED': return 'Partial';
+            case 'FULLY_RECEIVED': return 'Received';
             case 'CLOSED': return 'Closed';
             case 'REJECTED': return 'Rejected';
             default: return status;
@@ -167,21 +169,6 @@ export default function AllIndentsList() {
 
     return (
         <View style={styles.container}>
-            {/* Navigation Tabs */}
-            <View style={styles.navTabs}>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/pending' as any)}>
-                    <Text style={styles.navTabText}>Pending</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.navTab, styles.navTabActive]}>
-                    <Text style={[styles.navTabText, styles.navTabTextActive]}>All</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/damaged' as any)}>
-                    <Text style={styles.navTabText}>Damaged</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/partial' as any)}>
-                    <Text style={styles.navTabText}>Partial</Text>
-                </TouchableOpacity>
-            </View>
 
             {/* Filters */}
             <View style={styles.filters}>

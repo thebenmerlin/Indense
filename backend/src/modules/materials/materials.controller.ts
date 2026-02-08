@@ -71,6 +71,15 @@ class MaterialsController {
             next(error);
         }
     }
+
+    async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const material = await materialsService.update(req.params.id, req.body);
+            res.json({ success: true, data: material });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export const materialsController = new MaterialsController();

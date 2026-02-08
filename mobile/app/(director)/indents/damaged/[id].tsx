@@ -10,8 +10,11 @@ import {
     Modal,
     Image,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { damagesApi } from '../../../../src/api';
+import { UPLOADS_URL } from '../../../../src/api/client';
+import { DamageReport } from '../../../../src/types';
 
 const theme = {
     colors: {
@@ -21,77 +24,64 @@ const theme = {
         textPrimary: '#0F172A',
         textSecondary: '#64748B',
         border: '#E2E8F0',
-        error: '#EF4444',
         success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B',
     }
 };
 
-interface DamagedItem {
-    id: string;
-    name: string;
-    orderedQty: number;
-    damagedQty: number;
-    unit: string;
-    images?: string[];
-    description?: string;
-    reorderStatus?: 'pending' | 'ordered' | 'received';
-}
+const getSeverityColor = (severity: string) => {
+    switch (severity) {
+        case 'SEVERE': return theme.colors.error;
+        case 'MODERATE': return theme.colors.warning;
+        case 'MINOR': return theme.colors.textSecondary;
+        default: return theme.colors.textSecondary;
+    }
+};
 
-interface DamagedOrder {
-    id: string;
-    indentName: string;
-    siteName: string;
-    siteEngineer: string;
-    reportedDate: string;
-    items: DamagedItem[];
-}
+// Helper to construct full image URL from relative path
+const getImageUrl = (imagePath: string) => {
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${UPLOADS_URL}/${imagePath}`;
+};
 
-export default function DamagedOrderDetail() {
+export default function DamageDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const [order, setOrder] = useState<DamagedOrder | null>(null);
+    const router = useRouter();
+    const [damage, setDamage] = useState<DamageReport | null>(null);
     const [loading, setLoading] = useState(true);
-    const [showItem, setShowItem] = useState<DamagedItem | null>(null);
+    const [showImageModal, setShowImageModal] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchOrder();
+        if (id) fetchDamage();
     }, [id]);
 
-    const fetchOrder = async () => {
+    const fetchDamage = async () => {
         try {
-            // TODO: Replace with actual API call
-            setOrder({
-                id: id!,
-                indentName: 'Steel & Cement Order',
-                siteName: 'Green Valley Residences',
-                siteEngineer: 'Rajesh Kumar',
-                reportedDate: '2024-02-02',
-                items: [
-                    { id: '1', name: 'TMT Steel Bars 12mm', orderedQty: 500, damagedQty: 50, unit: 'kg', description: 'Bent and corroded bars', reorderStatus: 'ordered' },
-                    { id: '2', name: 'Cement OPC 53', orderedQty: 100, damagedQty: 10, unit: 'bags', description: 'Packaging torn, cement hardened', reorderStatus: 'pending' },
-                ],
-            });
+            const data = await damagesApi.getById(id!);
+            setDamage(data);
         } catch (error) {
-            console.error('Failed to fetch order:', error);
+            console.error('Failed to fetch damage:', error);
             Alert.alert('Error', 'Failed to load damage report');
         } finally {
             setLoading(false);
         }
     };
 
-    const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('en-IN', {
+    const formatDate = (dateStr: string | null | undefined | Date) => {
+        if (!dateStr) return '-';
+        const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+        return date.toLocaleDateString('en-IN', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',
         });
     };
 
-    const getReorderStatusColor = (status?: string) => {
-        switch (status) {
-            case 'ordered': return theme.colors.primary;
-            case 'received': return theme.colors.success;
-            default: return theme.colors.textSecondary;
-        }
+    const openImageModal = (imagePath: string) => {
+        setSelectedImage(getImageUrl(imagePath));
+        setShowImageModal(true);
     };
 
     if (loading) {
@@ -102,108 +92,139 @@ export default function DamagedOrderDetail() {
         );
     }
 
-    if (!order) {
+    if (!damage) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={styles.errorText}>Order not found</Text>
+                <Text style={styles.errorText}>Damage report not found</Text>
             </View>
         );
     }
 
+    const severityColor = getSeverityColor(damage.severity);
+
     return (
         <View style={styles.container}>
             <ScrollView style={styles.scrollView}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.headerIcon}>
-                        <Ionicons name="alert-circle" size={32} color={theme.colors.error} />
+                {/* Header Info */}
+                <View style={[styles.header, { borderLeftColor: severityColor }]}>
+                    <View style={styles.headerTop}>
+                        <Text style={styles.materialName}>
+                            {damage.indentItem?.material?.name || damage.name}
+                        </Text>
+                        <View style={[styles.severityBadge, { backgroundColor: severityColor + '20' }]}>
+                            <Text style={[styles.severityText, { color: severityColor }]}>
+                                {damage.severity}
+                            </Text>
+                        </View>
                     </View>
-                    <Text style={styles.indentName}>{order.indentName}</Text>
-                    <Text style={styles.subtitle}>{order.siteName}</Text>
+                    <Text style={styles.indentNumber}>{damage.indent?.indentNumber}</Text>
+
+                    <View style={styles.infoRow}>
+                        <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
+                        <Text style={styles.infoText}>{damage.site?.name || damage.indent?.site?.name}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="person-outline" size={14} color={theme.colors.textSecondary} />
+                        <Text style={styles.infoText}>Reported by: {damage.reportedBy?.name}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
+                        <Text style={styles.infoText}>Reported: {formatDate(damage.createdAt)}</Text>
+                    </View>
+                    {damage.damagedQty && (
+                        <View style={styles.infoRow}>
+                            <Ionicons name="cube-outline" size={14} color={theme.colors.textSecondary} />
+                            <Text style={styles.infoText}>Damaged Qty: {damage.damagedQty}</Text>
+                        </View>
+                    )}
                 </View>
 
-                {/* Info */}
-                <View style={styles.infoCard}>
-                    <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Site Engineer</Text>
-                        <Text style={styles.infoValue}>{order.siteEngineer}</Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Reported Date</Text>
-                        <Text style={styles.infoValue}>{formatDate(order.reportedDate)}</Text>
-                    </View>
-                </View>
-
-                {/* Damaged Items */}
+                {/* Status Info */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Damaged Items ({order.items.length})</Text>
-                    {order.items.map(item => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={styles.itemCard}
-                            onPress={() => setShowItem(item)}
-                        >
-                            <View style={styles.itemHeader}>
-                                <Text style={styles.itemName}>{item.name}</Text>
-                                <View style={[styles.reorderBadge, { backgroundColor: getReorderStatusColor(item.reorderStatus) + '15' }]}>
-                                    <Text style={[styles.reorderText, { color: getReorderStatusColor(item.reorderStatus) }]}>
-                                        {item.reorderStatus === 'ordered' ? 'Reordered' : item.reorderStatus === 'received' ? 'Received' : 'Pending'}
-                                    </Text>
-                                </View>
+                    <Text style={styles.sectionTitle}>Status</Text>
+                    <View style={styles.statusCard}>
+                        <View style={styles.statusRow}>
+                            <Text style={styles.statusLabel}>Current Status</Text>
+                            <View style={[styles.statusBadge, damage.isReordered && styles.reorderedBadge]}>
+                                <Text style={[styles.statusBadgeText, damage.isReordered && styles.reorderedText]}>
+                                    {damage.isReordered ? 'REORDERED' : damage.status}
+                                </Text>
                             </View>
-                            <View style={styles.qtyRow}>
-                                <Text style={styles.qtyLabel}>Ordered: {item.orderedQty} {item.unit}</Text>
-                                <Text style={[styles.qtyLabel, { color: theme.colors.error }]}>Damaged: {item.damagedQty} {item.unit}</Text>
+                        </View>
+                        {damage.isReordered && damage.reorderExpectedDate && (
+                            <View style={styles.statusRow}>
+                                <Text style={styles.statusLabel}>Expected Delivery</Text>
+                                <Text style={styles.statusValue}>{formatDate(damage.reorderExpectedDate)}</Text>
                             </View>
-                            {item.description && (
-                                <Text style={styles.itemDescription}>{item.description}</Text>
-                            )}
-                            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} style={styles.itemChevron} />
-                        </TouchableOpacity>
-                    ))}
+                        )}
+                        {damage.reorderedBy && (
+                            <View style={styles.statusRow}>
+                                <Text style={styles.statusLabel}>Reordered By</Text>
+                                <Text style={styles.statusValue}>{damage.reorderedBy.name}</Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+
+                {/* Description */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Description</Text>
+                    <View style={styles.descriptionCard}>
+                        <Text style={styles.descriptionText}>{damage.description || 'No description provided'}</Text>
+                    </View>
+                </View>
+
+                {/* Photos */}
+                {damage.images && damage.images.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Photos ({damage.images.length})</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
+                            {damage.images.map((image, index) => (
+                                <TouchableOpacity
+                                    key={image.id}
+                                    onPress={() => openImageModal(image.path)}
+                                    style={styles.imageContainer}
+                                >
+                                    <Image
+                                        source={{ uri: getImageUrl(image.path) }}
+                                        style={styles.imageThumbnail}
+                                    />
+                                    <View style={styles.imageOverlay}>
+                                        <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
+                                        <Text style={styles.imageViewText}>View {index + 1}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
+
+                {/* Action: Go to Indent Detail */}
+                <View style={styles.section}>
+                    <TouchableOpacity
+                        style={styles.viewIndentButton}
+                        onPress={() => router.push(`/(director)/indents/${damage.indentId}` as any)}
+                    >
+                        <Ionicons name="document-text-outline" size={20} color={theme.colors.primary} />
+                        <Text style={styles.viewIndentButtonText}>View Full Indent</Text>
+                        <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+                    </TouchableOpacity>
                 </View>
 
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* Item Detail Modal */}
-            <Modal visible={!!showItem} animationType="slide" presentationStyle="pageSheet">
-                <View style={styles.modal}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Damage Details</Text>
-                        <TouchableOpacity onPress={() => setShowItem(null)}>
-                            <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-                        </TouchableOpacity>
-                    </View>
-                    {showItem && (
-                        <ScrollView style={styles.modalContent}>
-                            <Text style={styles.modalItemName}>{showItem.name}</Text>
-
-                            <View style={styles.modalInfoRow}>
-                                <Text style={styles.modalInfoLabel}>Ordered Quantity</Text>
-                                <Text style={styles.modalInfoValue}>{showItem.orderedQty} {showItem.unit}</Text>
-                            </View>
-                            <View style={styles.modalInfoRow}>
-                                <Text style={styles.modalInfoLabel}>Damaged Quantity</Text>
-                                <Text style={[styles.modalInfoValue, { color: theme.colors.error }]}>{showItem.damagedQty} {showItem.unit}</Text>
-                            </View>
-
-                            {showItem.description && (
-                                <View style={styles.descriptionBox}>
-                                    <Text style={styles.descriptionLabel}>Description</Text>
-                                    <Text style={styles.descriptionText}>{showItem.description}</Text>
-                                </View>
-                            )}
-
-                            <View style={styles.modalInfoRow}>
-                                <Text style={styles.modalInfoLabel}>Reorder Status</Text>
-                                <View style={[styles.reorderBadge, { backgroundColor: getReorderStatusColor(showItem.reorderStatus) + '15' }]}>
-                                    <Text style={[styles.reorderText, { color: getReorderStatusColor(showItem.reorderStatus) }]}>
-                                        {showItem.reorderStatus === 'ordered' ? 'Reordered' : showItem.reorderStatus === 'received' ? 'Received' : 'Pending'}
-                                    </Text>
-                                </View>
-                            </View>
-                        </ScrollView>
+            {/* Image Preview Modal */}
+            <Modal visible={showImageModal} transparent animationType="fade">
+                <View style={styles.imageModalOverlay}>
+                    <TouchableOpacity
+                        style={styles.imageModalClose}
+                        onPress={() => setShowImageModal(false)}
+                    >
+                        <Ionicons name="close" size={28} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    {selectedImage && (
+                        <Image source={{ uri: selectedImage }} style={styles.fullImage} resizeMode="contain" />
                     )}
                 </View>
             </Modal>
@@ -218,84 +239,108 @@ const styles = StyleSheet.create({
     errorText: { fontSize: 16, color: theme.colors.textSecondary },
     header: {
         backgroundColor: theme.colors.cardBg,
-        padding: 24,
-        alignItems: 'center',
+        padding: 16,
         marginBottom: 8,
+        borderLeftWidth: 4,
     },
-    headerIcon: {
-        width: 72,
-        height: 72,
-        borderRadius: 18,
-        backgroundColor: theme.colors.error + '15',
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+    },
+    materialName: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, flex: 1 },
+    severityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    severityText: { fontSize: 11, fontWeight: '700' },
+    indentNumber: { fontSize: 13, color: theme.colors.textSecondary, fontFamily: 'monospace', marginTop: 4, marginBottom: 12 },
+    infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+    infoText: { fontSize: 14, color: theme.colors.textSecondary },
+    section: { padding: 16 },
+    sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 12 },
+    statusCard: {
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 12,
+        padding: 16,
+    },
+    statusRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    statusLabel: { fontSize: 14, color: theme.colors.textSecondary },
+    statusValue: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
+    statusBadge: {
+        backgroundColor: theme.colors.warning + '20',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    statusBadgeText: { fontSize: 11, fontWeight: '700', color: theme.colors.warning },
+    reorderedBadge: { backgroundColor: theme.colors.primary + '20' },
+    reorderedText: { color: theme.colors.primary },
+    descriptionCard: {
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 12,
+        padding: 16,
+    },
+    descriptionText: { fontSize: 14, color: theme.colors.textPrimary, lineHeight: 22 },
+    imagesScroll: { marginTop: 8 },
+    imageContainer: {
+        position: 'relative',
+        marginRight: 12,
+    },
+    imageThumbnail: {
+        width: 100,
+        height: 100,
+        borderRadius: 8,
+    },
+    imageOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 4,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+        gap: 4,
+    },
+    imageViewText: {
+        color: '#FFFFFF',
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    viewIndentButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.cardBg,
+        paddingVertical: 16,
+        borderRadius: 12,
+        gap: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+    },
+    viewIndentButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.primary },
+    imageModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.9)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 12,
     },
-    indentName: { fontSize: 22, fontWeight: '700', color: theme.colors.textPrimary },
-    subtitle: { fontSize: 15, color: theme.colors.textSecondary, marginTop: 4 },
-    infoCard: {
-        backgroundColor: theme.colors.cardBg,
-        marginHorizontal: 16,
-        marginBottom: 16,
-        borderRadius: 12,
-        padding: 16,
+    imageModalClose: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+        zIndex: 10,
     },
-    infoRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
+    fullImage: {
+        width: '100%',
+        height: '80%',
     },
-    infoLabel: { fontSize: 14, color: theme.colors.textSecondary },
-    infoValue: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
-    section: { padding: 16, paddingTop: 0 },
-    sectionTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 12, textTransform: 'uppercase' },
-    itemCard: {
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 10,
-        borderLeftWidth: 3,
-        borderLeftColor: theme.colors.error,
-    },
-    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-    itemName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary, flex: 1 },
-    reorderBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-    reorderText: { fontSize: 11, fontWeight: '600' },
-    qtyRow: { flexDirection: 'row', gap: 16, marginBottom: 6 },
-    qtyLabel: { fontSize: 13, color: theme.colors.textSecondary },
-    itemDescription: { fontSize: 13, color: theme.colors.textSecondary, fontStyle: 'italic' },
-    itemChevron: { position: 'absolute', right: 14, top: '50%' },
-    modal: { flex: 1, backgroundColor: theme.colors.surface },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: theme.colors.cardBg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    modalTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
-    modalContent: { padding: 20 },
-    modalItemName: { fontSize: 24, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 20 },
-    modalInfoRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    modalInfoLabel: { fontSize: 15, color: theme.colors.textSecondary },
-    modalInfoValue: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
-    descriptionBox: {
-        backgroundColor: theme.colors.surface,
-        padding: 14,
-        borderRadius: 10,
-        marginVertical: 16,
-    },
-    descriptionLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 },
-    descriptionText: { fontSize: 14, color: theme.colors.textPrimary },
 });

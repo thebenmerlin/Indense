@@ -24,4 +24,11 @@ router.post(
     materialsController.create.bind(materialsController)
 );
 
+// Only head office can update materials
+router.put(
+    '/:id',
+    requireHeadOffice,
+    materialsController.update.bind(materialsController)
+);
+
 export default router;

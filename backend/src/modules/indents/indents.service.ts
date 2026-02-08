@@ -117,7 +117,11 @@ class IndentsService {
                     },
                 },
                 order: {
-                    include: { orderItems: true },
+                    include: {
+                        orderItems: {
+                            include: { invoices: true }
+                        }
+                    },
                 },
                 receipts: {
                     include: {

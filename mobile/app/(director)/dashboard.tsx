@@ -98,7 +98,7 @@ export default function DirectorDashboard() {
                     subtitle="Pending, All, Damaged & Partial"
                     icon="document-text-outline"
                     color="#3B82F6"
-                    onPress={() => router.push('/(director)/indents/pending' as any)}
+                    onPress={() => router.push('/(director)/indents' as any)}
                 />
 
                 {/* Analytics */}

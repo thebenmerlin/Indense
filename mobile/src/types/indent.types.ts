@@ -131,6 +131,13 @@ export interface Indent {
             vendorContactPerson?: string | null;
             vendorContactPhone?: string | null;
             vendorNatureOfBusiness?: string | null;
+            // Invoices for this item
+            invoices?: Array<{
+                id: string;
+                filename: string;
+                originalName: string;
+                path: string;
+            }>;
         }>;
     } | null;
     // Receipts with images

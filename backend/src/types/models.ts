@@ -109,12 +109,20 @@ export interface UnitOfMeasureResponse {
 
 export interface CreateMaterialDto {
     name: string;
-    code: string;
-    itemGroupId: string;  // Foreign key to ItemGroup
-    unitId: string;       // Foreign key to UnitOfMeasure
+    code?: string;  // Made optional - can be auto-generated
+    specification?: string;  // Material specification
+    dimensions?: string;     // Dimensions/size
+    color?: string;          // Color
+    // Either provide IDs OR names - if names provided, will find or create
+    itemGroupId?: string;    // Foreign key to ItemGroup
+    unitId?: string;         // Foreign key to UnitOfMeasure
+    categoryName?: string;   // Category name - will find or create
+    unitName?: string;       // Unit name - will find or create
+    unitCode?: string;       // Unit abbreviation code
     description?: string;
     specifications?: MaterialSpecifications;
 }
+
 
 export interface MaterialResponse {
     id: string;

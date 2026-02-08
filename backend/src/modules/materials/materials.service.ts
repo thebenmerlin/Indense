@@ -136,16 +136,100 @@ class MaterialsService {
         }));
     }
 
+    /**
+     * Create a new material with automatic category/unit creation
+     * - If itemGroupId/unitId are provided, use them directly
+     * - If categoryName/unitName are provided, find existing or create new
+     */
     async create(data: CreateMaterialDto): Promise<MaterialResponse> {
+        let finalItemGroupId = data.itemGroupId;
+        let finalUnitId = data.unitId;
+
+        // Handle category - find or create by name if ID not provided
+        if (!finalItemGroupId && data.categoryName) {
+            const categoryName = data.categoryName.trim();
+
+            // Try to find existing category (case-insensitive)
+            let category = await prisma.itemGroup.findFirst({
+                where: { name: { equals: categoryName, mode: 'insensitive' } },
+            });
+
+            // Create new category if not found
+            if (!category) {
+                category = await prisma.itemGroup.create({
+                    data: {
+                        name: categoryName,
+                        isActive: true,
+                    },
+                });
+            }
+            finalItemGroupId = category.id;
+        }
+
+        // Handle unit - find or create by name if ID not provided
+        if (!finalUnitId && data.unitName) {
+            let unitName = data.unitName.trim();
+            let unitCode = data.unitCode?.trim() || '';
+
+            // Parse "Name (Code)" format if provided
+            const match = unitName.match(/^(.+?)\s*\(([^)]+)\)$/);
+            if (match) {
+                unitName = match[1].trim();
+                unitCode = match[2].trim();
+            }
+
+            // Try to find existing unit (case-insensitive by name or code)
+            let unit = await prisma.unitOfMeasure.findFirst({
+                where: {
+                    OR: [
+                        { name: { equals: unitName, mode: 'insensitive' } },
+                        { code: { equals: unitCode || unitName, mode: 'insensitive' } },
+                    ],
+                },
+            });
+
+            // Create new unit if not found
+            if (!unit) {
+                const finalCode = unitCode || unitName.toUpperCase().replace(/\s+/g, '').substring(0, 10);
+                unit = await prisma.unitOfMeasure.create({
+                    data: {
+                        name: unitName,
+                        code: finalCode,
+                        isActive: true,
+                    },
+                });
+            }
+            finalUnitId = unit.id;
+        }
+
+        // Validate we have required IDs
+        if (!finalItemGroupId) {
+            throw new Error('Category is required - provide itemGroupId or categoryName');
+        }
+        if (!finalUnitId) {
+            throw new Error('Unit is required - provide unitId or unitName');
+        }
+
+        // Generate code if not provided
+        const materialCode = data.code || `MAT-${Date.now().toString(36).toUpperCase()}`;
+
+        // Build specifications object from individual fields
+        const specifications: Record<string, string> = {};
+        if (data.specification) specifications.specification = data.specification;
+        if (data.dimensions) specifications.dimensions = data.dimensions;
+        if (data.color) specifications.color = data.color;
+
         const material = await prisma.material.create({
             data: {
                 name: data.name,
-                code: data.code,
-                itemGroupId: data.itemGroupId,
-                unitId: data.unitId,
+                code: materialCode,
+                itemGroupId: finalItemGroupId,
+                unitId: finalUnitId,
                 description: data.description,
-                specifications: data.specifications as object || undefined,
-                isSystemData: false,  // User-created materials are not system data
+                specifications: Object.keys(specifications).length > 0
+                    ? specifications
+                    : (data.specifications as object || undefined),
+                isSystemData: false,
             },
             include: {
                 itemGroup: true,
@@ -154,6 +238,50 @@ class MaterialsService {
         });
         return material as unknown as MaterialResponse;
     }
+
+    /**
+     * Update an existing material
+     */
+    async update(id: string, data: {
+        name?: string;
+        code?: string;
+        specification?: string;
+        dimensions?: string;
+        color?: string;
+        itemGroupId?: string;
+        unitId?: string;
+    }): Promise<MaterialResponse> {
+        // Check if material exists
+        const existing = await prisma.material.findUnique({ where: { id } });
+        if (!existing) throw new NotFoundError('Material not found');
+
+        // Build update data
+        const updateData: Record<string, unknown> = {};
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.code !== undefined) updateData.code = data.code;
+        if (data.itemGroupId !== undefined) updateData.itemGroupId = data.itemGroupId;
+        if (data.unitId !== undefined) updateData.unitId = data.unitId;
+
+        // Handle specifications - store spec, dimensions, color in specifications field
+        const specs: Record<string, string> = {};
+        if (data.specification !== undefined) specs.specification = data.specification;
+        if (data.dimensions !== undefined) specs.dimensions = data.dimensions;
+        if (data.color !== undefined) specs.color = data.color;
+        if (Object.keys(specs).length > 0) {
+            updateData.specifications = specs;
+        }
+
+        const material = await prisma.material.update({
+            where: { id },
+            data: updateData,
+            include: {
+                itemGroup: true,
+                unit: true,
+            },
+        });
+        return material as unknown as MaterialResponse;
+    }
+
 }
 
 export const materialsService = new MaterialsService();

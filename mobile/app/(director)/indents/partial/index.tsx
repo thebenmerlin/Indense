@@ -12,6 +12,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { damagesApi } from '../../../../src/api';
 import { Indent } from '../../../../src/types';
+import FilterModal, { FilterOptions } from '../../../../src/components/FilterModal';
 
 const theme = {
     colors: {
@@ -22,6 +23,8 @@ const theme = {
         textSecondary: '#64748B',
         border: '#E2E8F0',
         warning: '#F59E0B',
+        success: '#10B981',
+        error: '#EF4444',
     }
 };
 
@@ -29,30 +32,36 @@ export default function PartialOrdersList() {
     const [indents, setIndents] = useState<Indent[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [showFilter, setShowFilter] = useState(false);
+    const [filters, setFilters] = useState<FilterOptions>({ startDate: null, endDate: null, status: 'ALL' });
     const router = useRouter();
-
-    const fetchIndents = useCallback(async () => {
-        try {
-            // Get indents with partially received/not received materials
-            const response = await damagesApi.getPartiallyReceivedIndents({ limit: 50 });
-            // Sort by date, newest first
-            const sortedData = [...response.data].sort(
-                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
-            setIndents(sortedData);
-        } catch (error) {
-            console.error('Failed to fetch indents:', error);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, []);
 
     useFocusEffect(
         useCallback(() => {
             fetchIndents();
-        }, [fetchIndents])
+        }, [filters])
     );
+
+    const fetchIndents = async () => {
+        try {
+            setLoading(true);
+            const response = await damagesApi.getPartiallyReceivedIndents({
+                siteId: filters.siteId || undefined,
+                fromDate: filters.startDate?.toISOString(),
+                toDate: filters.endDate?.toISOString(),
+            });
+            // Sort by date, newest first
+            const sortedData = [...(response.data || [])].sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            setIndents(sortedData);
+        } catch (error) {
+            console.error('Failed to fetch partial orders:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -60,45 +69,82 @@ export default function PartialOrdersList() {
     };
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+        return new Date(dateStr).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
     };
 
-    const calculateProgress = (indent: Indent) => {
-        const items = indent.items || [];
-        if (items.length === 0) return { received: 0, total: 0, percent: 0 };
+    const getProgress = (indent: Indent) => {
+        const total = indent.items?.length || 0;
+        if (total === 0) return { received: 0, total: 0, percent: 0 };
+        const received = indent.items?.filter((item) => item.arrivalStatus === 'ARRIVED').length || 0;
+        return { received, total, percent: Math.round((received / total) * 100) };
+    };
 
-        const arrivedItems = items.filter(i => i.arrivalStatus === 'ARRIVED').length;
-        const percent = Math.round((arrivedItems / items.length) * 100);
-        return { received: arrivedItems, total: items.length, percent };
+    const handleApplyFilters = (newFilters: FilterOptions) => {
+        setFilters(newFilters);
+        setShowFilter(false);
     };
 
     const renderIndent = ({ item }: { item: Indent }) => {
-        const siteName = item.site?.name || 'Unknown Site';
-        const progress = calculateProgress(item);
+        const progress = getProgress(item);
 
         return (
             <TouchableOpacity
-                style={styles.card}
                 onPress={() => router.push(`/(director)/indents/${item.id}` as any)}
                 activeOpacity={0.7}
             >
-                <View style={styles.cardIcon}>
-                    <Ionicons name="pie-chart" size={24} color={theme.colors.warning} />
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <View style={styles.cardIcon}>
+                            <Ionicons name="hourglass-outline" size={24} color={theme.colors.warning} />
+                        </View>
+                        <View style={styles.cardContent}>
+                            <Text style={styles.indentName} numberOfLines={1}>
+                                {item.name || item.indentNumber}
+                            </Text>
+                            <Text style={styles.indentNumber}>{item.indentNumber}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.cardDetails}>
+                        <View style={styles.detailRow}>
+                            <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
+                            <Text style={styles.detailText}>{item.site?.name || 'N/A'}</Text>
+                        </View>
+                        <View style={styles.detailRow}>
+                            <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
+                            <Text style={styles.detailText}>{formatDate(item.createdAt)}</Text>
+                        </View>
+                    </View>
+
+                    {/* Progress Section */}
+                    <View style={styles.progressSection}>
+                        <View style={styles.progressHeader}>
+                            <Text style={styles.progressLabel}>Received Progress</Text>
+                            <Text style={styles.progressValue}>{progress.percent}%</Text>
+                        </View>
+                        <View style={styles.progressBar}>
+                            <View style={[styles.progressFill, { width: `${progress.percent}%` }]} />
+                        </View>
+                        <View style={styles.itemCounts}>
+                            <Text style={styles.countText}>
+                                <Text style={styles.countReceived}>{progress.received}</Text> / {progress.total} items received
+                            </Text>
+                            <Text style={styles.pendingText}>{progress.total - progress.received} pending</Text>
+                        </View>
+                    </View>
                 </View>
-                <View style={styles.cardContent}>
-                    <Text style={styles.indentName}>{item.name}</Text>
-                    <Text style={styles.siteText}>{siteName}</Text>
-                    <Text style={styles.metaText}>
-                        {progress.received}/{progress.total} items received • {formatDate(item.updatedAt || item.createdAt)}
-                    </Text>
-                </View>
-                <View style={styles.progressBadge}>
-                    <Text style={styles.progressText}>{progress.percent}%</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
         );
     };
+
+    const activeFilterCount = [filters.startDate, filters.endDate, filters.siteId].filter(Boolean).length;
 
     if (loading && !refreshing) {
         return (
@@ -110,19 +156,19 @@ export default function PartialOrdersList() {
 
     return (
         <View style={styles.container}>
-            {/* Navigation Tabs */}
-            <View style={styles.navTabs}>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/pending' as any)}>
-                    <Text style={styles.navTabText}>Pending</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/all' as any)}>
-                    <Text style={styles.navTabText}>All</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navTab} onPress={() => router.replace('/(director)/indents/damaged' as any)}>
-                    <Text style={styles.navTabText}>Damaged</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.navTab, styles.navTabActive]}>
-                    <Text style={[styles.navTabText, styles.navTabTextActive]}>Partial</Text>
+            {/* Header with Filter */}
+            <View style={styles.headerBar}>
+                <Text style={styles.headerTitle}>Partially Received ({indents.length})</Text>
+                <TouchableOpacity
+                    style={styles.filterButton}
+                    onPress={() => setShowFilter(true)}
+                >
+                    <Ionicons name="filter" size={20} color={theme.colors.primary} />
+                    {activeFilterCount > 0 && (
+                        <View style={styles.filterBadge}>
+                            <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -134,11 +180,19 @@ export default function PartialOrdersList() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <Ionicons name="checkmark-circle-outline" size={56} color={theme.colors.textSecondary} />
-                        <Text style={styles.emptyText}>No partial orders</Text>
-                        <Text style={styles.emptySubtext}>All orders received in full</Text>
+                        <Ionicons name="checkmark-done-circle-outline" size={64} color={theme.colors.success} />
+                        <Text style={styles.emptyText}>All Orders Complete</Text>
+                        <Text style={styles.emptySubtext}>No partially received orders found</Text>
                     </View>
                 }
+            />
+
+            <FilterModal
+                visible={showFilter}
+                onClose={() => setShowFilter(false)}
+                onApply={handleApplyFilters}
+                initialFilters={filters}
+                showStatusFilter={false}
             />
         </View>
     );
@@ -147,52 +201,96 @@ export default function PartialOrdersList() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    navTabs: {
+    headerBar: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
         backgroundColor: theme.colors.cardBg,
-        paddingHorizontal: 8,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    navTab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
-    navTabActive: { borderBottomWidth: 2, borderBottomColor: theme.colors.primary },
-    navTabText: { fontSize: 14, color: theme.colors.textSecondary },
-    navTabTextActive: { fontWeight: '600', color: theme.colors.primary },
+    headerTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+    filterButton: { flexDirection: 'row', alignItems: 'center', padding: 8 },
+    filterBadge: {
+        position: 'absolute',
+        top: 2,
+        right: 2,
+        backgroundColor: theme.colors.primary,
+        borderRadius: 10,
+        width: 16,
+        height: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    filterBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFFFFF' },
     list: { padding: 16 },
     card: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: theme.colors.cardBg,
-        borderRadius: 14,
-        padding: 14,
-        marginBottom: 10,
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: theme.colors.warning,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
         elevation: 2,
     },
-    cardIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        backgroundColor: theme.colors.warning + '15',
-        justifyContent: 'center',
+    cardHeader: {
+        flexDirection: 'row',
         alignItems: 'center',
-        marginRight: 12,
     },
+    cardIcon: { marginRight: 14 },
     cardContent: { flex: 1 },
-    indentName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
-    siteText: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
-    metaText: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
-    progressBadge: {
-        backgroundColor: theme.colors.warning + '15',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-        marginRight: 8,
+    indentName: { fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary },
+    indentNumber: { fontSize: 12, color: theme.colors.textSecondary, fontFamily: 'monospace', marginTop: 2 },
+    divider: {
+        height: 1,
+        backgroundColor: theme.colors.border,
+        marginVertical: 12,
     },
-    progressText: { fontSize: 12, fontWeight: '600', color: theme.colors.warning },
+    cardDetails: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    detailRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    detailText: { fontSize: 13, color: theme.colors.textSecondary },
+    progressSection: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: 8,
+        padding: 12,
+    },
+    progressHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    progressLabel: { fontSize: 13, color: theme.colors.textSecondary },
+    progressValue: { fontSize: 14, fontWeight: '700', color: theme.colors.warning },
+    progressBar: {
+        height: 8,
+        backgroundColor: theme.colors.border,
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: theme.colors.warning,
+        borderRadius: 4,
+    },
+    itemCounts: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 8,
+    },
+    countText: { fontSize: 12, color: theme.colors.textSecondary },
+    countReceived: { fontWeight: '700', color: theme.colors.success },
+    pendingText: { fontSize: 12, fontWeight: '600', color: theme.colors.error },
     empty: { padding: 48, alignItems: 'center' },
     emptyText: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 16 },
     emptySubtext: { fontSize: 14, color: theme.colors.textSecondary, marginTop: 4 },

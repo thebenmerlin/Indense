@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -6,11 +6,12 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
-    Modal,
+    RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
+import { reportsApi, DashboardSummary } from '../../../src/api';
 
 const theme = {
     colors: {
@@ -27,14 +28,6 @@ const theme = {
     }
 };
 
-interface SummaryStats {
-    totalIndents: number;
-    approvedIndents: number;
-    pendingIndents: number;
-    orderedIndents: number;
-    totalValue: number;
-}
-
 interface ReportItem {
     title: string;
     description: string;
@@ -44,41 +37,32 @@ interface ReportItem {
 }
 
 export default function DirectorAnalytics() {
-    const [stats, setStats] = useState<SummaryStats>({
-        totalIndents: 0,
-        approvedIndents: 0,
-        pendingIndents: 0,
-        orderedIndents: 0,
-        totalValue: 0,
-    });
+    const [summary, setSummary] = useState<DashboardSummary | null>(null);
     const [loading, setLoading] = useState(true);
-    const [showFilters, setShowFilters] = useState(false);
-    const [dateRange, setDateRange] = useState('all');
-    const [siteFilter, setSiteFilter] = useState('all');
+    const [refreshing, setRefreshing] = useState(false);
     const router = useRouter();
 
-    const sites = ['all', 'Green Valley', 'Skyline Towers', 'Riverside'];
+    useFocusEffect(
+        useCallback(() => {
+            fetchDashboardSummary();
+        }, [])
+    );
 
-    useEffect(() => {
-        fetchStats();
-    }, [dateRange, siteFilter]);
-
-    const fetchStats = async () => {
+    const fetchDashboardSummary = async () => {
         try {
-            // TODO: Replace with actual API call
-            await new Promise(resolve => setTimeout(resolve, 500));
-            setStats({
-                totalIndents: 145,
-                approvedIndents: 98,
-                pendingIndents: 23,
-                orderedIndents: 72,
-                totalValue: 4560000,
-            });
+            const response = await reportsApi.getDashboardSummary();
+            setSummary(response);
         } catch (error) {
-            console.error('Failed to fetch stats:', error);
+            console.error('Failed to fetch dashboard summary:', error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchDashboardSummary();
     };
 
     const reports: ReportItem[] = [
@@ -112,7 +96,11 @@ export default function DirectorAnalytics() {
         },
     ];
 
-    if (loading) {
+    const formatCurrency = (amount: number) => {
+        return `₹${(amount || 0).toLocaleString('en-IN')}`;
+    };
+
+    if (loading && !refreshing) {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -121,41 +109,40 @@ export default function DirectorAnalytics() {
     }
 
     return (
-        <ScrollView style={styles.container}>
-            {/* Filter Button */}
-            <TouchableOpacity style={styles.filterBar} onPress={() => setShowFilters(true)}>
-                <View style={styles.filterButton}>
-                    <Ionicons name="filter" size={18} color={theme.colors.primary} />
-                    <Text style={styles.filterText}>Filter</Text>
-                </View>
-            </TouchableOpacity>
-
+        <ScrollView
+            style={styles.container}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
             {/* Summary Stats */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Summary</Text>
                 <View style={styles.statsGrid}>
                     <View style={[styles.statCard, { borderColor: theme.colors.primary }]}>
-                        <Text style={styles.statValue}>{stats.totalIndents}</Text>
+                        <Ionicons name="document-text-outline" size={24} color={theme.colors.primary} />
+                        <Text style={styles.statValue}>{summary?.totalIndents || 0}</Text>
                         <Text style={styles.statLabel}>Total Indents</Text>
                     </View>
                     <View style={[styles.statCard, { borderColor: theme.colors.warning }]}>
-                        <Text style={styles.statValue}>{stats.pendingIndents}</Text>
+                        <Ionicons name="time-outline" size={24} color={theme.colors.warning} />
+                        <Text style={styles.statValue}>{summary?.pendingIndents || 0}</Text>
                         <Text style={styles.statLabel}>Pending</Text>
                     </View>
                     <View style={[styles.statCard, { borderColor: theme.colors.success }]}>
-                        <Text style={styles.statValue}>{stats.approvedIndents}</Text>
-                        <Text style={styles.statLabel}>Approved</Text>
-                    </View>
-                    <View style={[styles.statCard, { borderColor: theme.colors.purple }]}>
-                        <Text style={styles.statValue}>{stats.orderedIndents}</Text>
-                        <Text style={styles.statLabel}>Ordered</Text>
+                        <Ionicons name="checkmark-circle-outline" size={24} color={theme.colors.success} />
+                        <Text style={styles.statValue}>{summary?.closedSites || 0}</Text>
+                        <Text style={styles.statLabel}>Closed Sites</Text>
                     </View>
                 </View>
 
-                {/* Total Value Card */}
-                <View style={styles.totalValueCard}>
-                    <Text style={styles.totalValueLabel}>Total Spend</Text>
-                    <Text style={styles.totalValueAmount}>₹{(stats.totalValue / 100000).toFixed(1)}L</Text>
+                {/* Total Expense Card */}
+                <View style={styles.expenseCard}>
+                    <View style={styles.expenseIcon}>
+                        <Ionicons name="wallet-outline" size={28} color={theme.colors.success} />
+                    </View>
+                    <View style={styles.expenseContent}>
+                        <Text style={styles.expenseLabel}>Total Expense</Text>
+                        <Text style={styles.expenseValue}>{formatCurrency(summary?.totalExpense || 0)}</Text>
+                    </View>
                 </View>
             </View>
 
@@ -181,58 +168,6 @@ export default function DirectorAnalytics() {
             </View>
 
             <View style={{ height: 40 }} />
-
-            {/* Filter Modal */}
-            <Modal visible={showFilters} animationType="slide" presentationStyle="pageSheet">
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Filters</Text>
-                        <TouchableOpacity onPress={() => setShowFilters(false)}>
-                            <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-                        </TouchableOpacity>
-                    </View>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.filterLabel}>Date Range</Text>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={dateRange}
-                                onValueChange={setDateRange}
-                            >
-                                <Picker.Item label="All Time" value="all" />
-                                <Picker.Item label="This Month" value="month" />
-                                <Picker.Item label="Last 3 Months" value="3months" />
-                                <Picker.Item label="This Year" value="year" />
-                            </Picker>
-                        </View>
-
-                        <Text style={styles.filterLabel}>Site</Text>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={siteFilter}
-                                onValueChange={setSiteFilter}
-                            >
-                                {sites.map(site => (
-                                    <Picker.Item key={site} label={site === 'all' ? 'All Sites' : site} value={site} />
-                                ))}
-                            </Picker>
-                        </View>
-                    </View>
-                    <View style={styles.modalFooter}>
-                        <TouchableOpacity
-                            style={styles.resetButton}
-                            onPress={() => { setDateRange('all'); setSiteFilter('all'); }}
-                        >
-                            <Text style={styles.resetButtonText}>Reset</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.applyButton}
-                            onPress={() => { setShowFilters(false); setLoading(true); }}
-                        >
-                            <Text style={styles.applyButtonText}>Apply</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
         </ScrollView>
     );
 }
@@ -240,23 +175,6 @@ export default function DirectorAnalytics() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    filterBar: {
-        padding: 12,
-        backgroundColor: theme.colors.cardBg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    filterButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        backgroundColor: theme.colors.primary + '10',
-        borderRadius: 20,
-        gap: 6,
-    },
-    filterText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
     section: { padding: 16 },
     sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 12 },
     statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
@@ -272,17 +190,35 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
     },
-    statValue: { fontSize: 28, fontWeight: '700', color: theme.colors.textPrimary },
+    statValue: { fontSize: 28, fontWeight: '700', color: theme.colors.textPrimary, marginTop: 8 },
     statLabel: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
-    totalValueCard: {
-        marginTop: 12,
-        backgroundColor: theme.colors.primary,
-        padding: 20,
-        borderRadius: 14,
+    expenseCard: {
+        flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: theme.colors.cardBg,
+        padding: 20,
+        borderRadius: 12,
+        marginTop: 12,
+        borderWidth: 2,
+        borderColor: theme.colors.success + '30',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+        elevation: 2,
     },
-    totalValueLabel: { fontSize: 14, color: '#FFFFFF', opacity: 0.8 },
-    totalValueAmount: { fontSize: 36, fontWeight: '700', color: '#FFFFFF', marginTop: 4 },
+    expenseIcon: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: theme.colors.success + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    expenseContent: { flex: 1 },
+    expenseLabel: { fontSize: 14, color: theme.colors.textSecondary },
+    expenseValue: { fontSize: 26, fontWeight: '700', color: theme.colors.success, marginTop: 2 },
     reportCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -307,35 +243,4 @@ const styles = StyleSheet.create({
     reportContent: { flex: 1 },
     reportTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
     reportDesc: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
-    modalContainer: { flex: 1, backgroundColor: theme.colors.surface },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: theme.colors.cardBg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    modalTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary },
-    modalContent: { flex: 1, padding: 16 },
-    filterLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 8, marginTop: 16 },
-    pickerContainer: {
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    modalFooter: {
-        flexDirection: 'row',
-        padding: 16,
-        gap: 12,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
-        backgroundColor: theme.colors.cardBg,
-    },
-    resetButton: { flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center' },
-    resetButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.textSecondary },
-    applyButton: { flex: 2, paddingVertical: 14, borderRadius: 10, backgroundColor: theme.colors.primary, alignItems: 'center' },
-    applyButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
 });

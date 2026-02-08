@@ -1,12 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
     StyleSheet,
-    FlatList,
+    ScrollView,
+    TouchableOpacity,
     ActivityIndicator,
+    Alert,
+    RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
+import { useFocusEffect } from '@react-navigation/native';
+import { reportsApi, DamageReportRow } from '../../../src/api';
 
 const theme = {
     colors: {
@@ -16,91 +22,107 @@ const theme = {
         textPrimary: '#0F172A',
         textSecondary: '#64748B',
         border: '#E2E8F0',
-        error: '#EF4444',
         success: '#10B981',
+        warning: '#F59E0B',
+        error: '#EF4444',
     }
 };
 
-interface DamageItem {
-    id: string;
-    materialName: string;
-    siteName: string;
-    quantity: number;
-    unit: string;
-    reportedDate: string;
-    reorderStatus: 'pending' | 'ordered' | 'received';
-}
-
-interface DamageSummary {
-    totalIncidents: number;
-    totalItems: number;
-    resolved: number;
-    monthlyData: { month: string; count: number }[];
-}
+const currentYear = new Date().getFullYear();
+const months = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' },
+];
+const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
 export default function DamageReport() {
-    const [summary, setSummary] = useState<DamageSummary | null>(null);
-    const [items, setItems] = useState<DamageItem[]>([]);
+    const [data, setData] = useState<DamageReportRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    // Filter state
+    const [fromMonth, setFromMonth] = useState(1);
+    const [fromYear, setFromYear] = useState(currentYear);
+    const [toMonth, setToMonth] = useState(new Date().getMonth() + 1);
+    const [toYear, setToYear] = useState(currentYear);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+        }, [fromMonth, fromYear, toMonth, toYear])
+    );
+
+    const getDateRange = () => {
+        const fromDate = new Date(fromYear, fromMonth - 1, 1);
+        const toDate = new Date(toYear, toMonth, 0);
+        return {
+            fromDate: fromDate.toISOString(),
+            toDate: toDate.toISOString(),
+        };
+    };
 
     const fetchData = async () => {
         try {
-            // TODO: Replace with actual API call
-            await new Promise(resolve => setTimeout(resolve, 500));
-            setSummary({
-                totalIncidents: 12,
-                totalItems: 28,
-                resolved: 20,
-                monthlyData: [
-                    { month: 'Jan', count: 5 },
-                    { month: 'Feb', count: 4 },
-                    { month: 'Mar', count: 3 },
-                ],
-            });
-            setItems([
-                { id: '1', materialName: 'TMT Steel Bars', siteName: 'Green Valley', quantity: 50, unit: 'kg', reportedDate: '2024-02-02', reorderStatus: 'ordered' },
-                { id: '2', materialName: 'Cement Bags', siteName: 'Skyline Towers', quantity: 10, unit: 'bags', reportedDate: '2024-01-28', reorderStatus: 'received' },
-                { id: '3', materialName: 'PVC Pipes', siteName: 'Riverside', quantity: 15, unit: 'pieces', reportedDate: '2024-01-25', reorderStatus: 'pending' },
-            ]);
+            setLoading(true);
+            const params = getDateRange();
+            const result = await reportsApi.getDamageReport(params);
+            setData(result || []);
         } catch (error) {
-            console.error('Failed to fetch data:', error);
+            console.error('Failed to fetch damage report:', error);
+            Alert.alert('Error', 'Failed to load damage report');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
-    const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchData();
+    };
+
+    const handleExport = async () => {
+        setExporting(true);
+        try {
+            const params = getDateRange();
+            await reportsApi.downloadDamageReport(params);
+            Alert.alert('Success', 'Damage report exported successfully.');
+        } catch (error) {
+            console.error('Failed to export:', error);
+            Alert.alert('Error', 'Failed to export report');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const formatDate = (dateStr: string | Date) => {
+        if (!dateStr) return '-';
+        return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
     };
 
     const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'ordered': return theme.colors.primary;
-            case 'received': return theme.colors.success;
+        switch (status?.toUpperCase()) {
+            case 'RESOLVED': return theme.colors.success;
+            case 'PENDING': return theme.colors.warning;
+            default: return theme.colors.error;
+        }
+    };
+
+    const getSeverityColor = (severity: string) => {
+        switch (severity?.toUpperCase()) {
+            case 'LOW': return theme.colors.success;
+            case 'MEDIUM': return theme.colors.warning;
+            case 'HIGH':
+            case 'CRITICAL': return theme.colors.error;
             default: return theme.colors.textSecondary;
         }
     };
 
-    const renderItem = ({ item }: { item: DamageItem }) => (
-        <View style={styles.card}>
-            <View style={styles.cardHeader}>
-                <Text style={styles.materialName}>{item.materialName}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.reorderStatus) + '15' }]}>
-                    <Text style={[styles.statusText, { color: getStatusColor(item.reorderStatus) }]}>
-                        {item.reorderStatus === 'ordered' ? 'Reordered' : item.reorderStatus === 'received' ? 'Received' : 'Pending'}
-                    </Text>
-                </View>
-            </View>
-            <Text style={styles.siteText}>{item.siteName} • {formatDate(item.reportedDate)}</Text>
-            <Text style={styles.qtyText}>{item.quantity} {item.unit} damaged</Text>
-        </View>
-    );
-
-    if (loading) {
+    if (loading && !refreshing) {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -108,62 +130,126 @@ export default function DamageReport() {
         );
     }
 
-    if (!summary) {
-        return (
-            <View style={styles.loadingContainer}>
-                <Text style={styles.errorText}>Failed to load data</Text>
-            </View>
-        );
-    }
-
-    const resolvedPercent = (summary.resolved / summary.totalItems) * 100;
-
     return (
         <View style={styles.container}>
-            {/* Summary */}
-            <View style={styles.summarySection}>
-                <View style={styles.summaryCard}>
-                    <View style={styles.summaryHeader}>
-                        <Ionicons name="alert-circle" size={24} color={theme.colors.error} />
-                        <Text style={styles.summaryTitle}>Damage Summary</Text>
-                    </View>
-                    <View style={styles.summaryStats}>
-                        <View style={styles.summaryItem}>
-                            <Text style={styles.summaryValue}>{summary.totalIncidents}</Text>
-                            <Text style={styles.summaryLabel}>Incidents</Text>
-                        </View>
-                        <View style={styles.summaryItem}>
-                            <Text style={styles.summaryValue}>{summary.totalItems}</Text>
-                            <Text style={styles.summaryLabel}>Items</Text>
-                        </View>
-                        <View style={styles.summaryItem}>
-                            <Text style={[styles.summaryValue, { color: theme.colors.success }]}>{summary.resolved}</Text>
-                            <Text style={styles.summaryLabel}>Resolved</Text>
-                        </View>
-                    </View>
-                    <View style={styles.progressSection}>
-                        <Text style={styles.progressLabel}>Resolution Progress</Text>
-                        <View style={styles.progressBarBg}>
-                            <View style={[styles.progressBarFill, { width: `${resolvedPercent}%` }]} />
-                        </View>
-                        <Text style={styles.progressText}>{resolvedPercent.toFixed(0)}% resolved</Text>
-                    </View>
-                </View>
-            </View>
+            {/* Filter Toggle */}
+            <TouchableOpacity style={styles.filterToggle} onPress={() => setShowFilters(!showFilters)}>
+                <Ionicons name="filter" size={18} color={theme.colors.primary} />
+                <Text style={styles.filterToggleText}>Filters</Text>
+                <Ionicons name={showFilters ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.primary} />
+            </TouchableOpacity>
 
-            {/* Recent Damage Items */}
-            <Text style={styles.sectionTitle}>Recent Damage Reports</Text>
-            <FlatList
-                data={items}
-                keyExtractor={item => item.id}
-                renderItem={renderItem}
-                contentContainerStyle={styles.list}
-                ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <Text style={styles.emptyText}>No damage reports</Text>
+            {/* Filters Panel */}
+            {showFilters && (
+                <View style={styles.filtersPanel}>
+                    <Text style={styles.filterLabel}>From</Text>
+                    <View style={styles.filterRow}>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={fromMonth} onValueChange={setFromMonth} style={styles.picker}>
+                                {months.map(m => <Picker.Item key={m.value} label={m.label} value={m.value} />)}
+                            </Picker>
+                        </View>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={fromYear} onValueChange={setFromYear} style={styles.picker}>
+                                {years.map(y => <Picker.Item key={y} label={String(y)} value={y} />)}
+                            </Picker>
+                        </View>
                     </View>
-                }
-            />
+
+                    <Text style={styles.filterLabel}>To</Text>
+                    <View style={styles.filterRow}>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={toMonth} onValueChange={setToMonth} style={styles.picker}>
+                                {months.map(m => <Picker.Item key={m.value} label={m.label} value={m.value} />)}
+                            </Picker>
+                        </View>
+                        <View style={styles.pickerContainer}>
+                            <Picker selectedValue={toYear} onValueChange={setToYear} style={styles.picker}>
+                                {years.map(y => <Picker.Item key={y} label={String(y)} value={y} />)}
+                            </Picker>
+                        </View>
+                    </View>
+
+                    <TouchableOpacity style={styles.applyButton} onPress={() => { setShowFilters(false); fetchData(); }}>
+                        <Text style={styles.applyButtonText}>Apply Filters</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Table Header */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View>
+                    <View style={styles.tableHeader}>
+                        <Text style={[styles.headerCell, { width: 120 }]}>Material</Text>
+                        <Text style={[styles.headerCell, { width: 90 }]}>Indent</Text>
+                        <Text style={[styles.headerCell, { width: 100 }]}>Site</Text>
+                        <Text style={[styles.headerCell, { width: 90 }]}>Reported By</Text>
+                        <Text style={[styles.headerCell, { width: 80 }]}>Date</Text>
+                        <Text style={[styles.headerCell, { width: 50, textAlign: 'center' }]}>Qty</Text>
+                        <Text style={[styles.headerCell, { width: 70, textAlign: 'center' }]}>Severity</Text>
+                        <Text style={[styles.headerCell, { width: 70, textAlign: 'center' }]}>Status</Text>
+                    </View>
+
+                    {/* Table Body */}
+                    <ScrollView
+                        style={styles.tableBody}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    >
+                        {data.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Ionicons name="alert-circle-outline" size={48} color={theme.colors.textSecondary} />
+                                <Text style={styles.emptyText}>No damage reports found</Text>
+                                <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+                            </View>
+                        ) : (
+                            data.map((row, index) => (
+                                <View key={index} style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}>
+                                    <Text style={[styles.materialName, { width: 120 }]} numberOfLines={2}>{row.materialName}</Text>
+                                    <Text style={[styles.cell, { width: 90 }]} numberOfLines={1}>{row.indentNumber}</Text>
+                                    <Text style={[styles.cell, { width: 100 }]} numberOfLines={1}>{row.siteName}</Text>
+                                    <Text style={[styles.cell, { width: 90 }]} numberOfLines={1}>{row.reportedBy}</Text>
+                                    <Text style={[styles.cell, { width: 80 }]}>{formatDate(row.reportedAt)}</Text>
+                                    <Text style={[styles.cell, { width: 50, textAlign: 'center' }]}>{row.damagedQty || '-'}</Text>
+                                    <View style={{ width: 70, alignItems: 'center' }}>
+                                        <View style={[styles.badge, { backgroundColor: getSeverityColor(row.severity) + '20' }]}>
+                                            <Text style={[styles.badgeText, { color: getSeverityColor(row.severity) }]}>
+                                                {row.severity || 'N/A'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <View style={{ width: 70, alignItems: 'center' }}>
+                                        <View style={[styles.badge, { backgroundColor: getStatusColor(row.status) + '20' }]}>
+                                            <Text style={[styles.badgeText, { color: getStatusColor(row.status) }]}>
+                                                {row.status || 'N/A'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))
+                        )}
+
+                        <View style={{ height: 100 }} />
+                    </ScrollView>
+                </View>
+            </ScrollView>
+
+            {/* Export Button */}
+            <View style={styles.exportContainer}>
+                <TouchableOpacity
+                    style={styles.exportButton}
+                    onPress={handleExport}
+                    disabled={exporting || data.length === 0}
+                >
+                    {exporting ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                        <>
+                            <Ionicons name="download-outline" size={20} color="#FFFFFF" />
+                            <Text style={styles.exportButtonText}>Export to Excel</Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+            </View>
         </View>
     );
 }
@@ -171,40 +257,95 @@ export default function DamageReport() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    errorText: { fontSize: 16, color: theme.colors.textSecondary },
-    summarySection: { padding: 16 },
-    summaryCard: {
+    filterToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
         backgroundColor: theme.colors.cardBg,
-        borderRadius: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: 8,
+    },
+    filterToggleText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary, flex: 1 },
+    filtersPanel: {
+        backgroundColor: theme.colors.cardBg,
         padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
     },
-    summaryHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-    summaryTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
-    summaryStats: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 },
-    summaryItem: { alignItems: 'center' },
-    summaryValue: { fontSize: 28, fontWeight: '700', color: theme.colors.textPrimary },
-    summaryLabel: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
-    progressSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: theme.colors.border },
-    progressLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 },
-    progressBarBg: { height: 8, backgroundColor: theme.colors.border, borderRadius: 4, overflow: 'hidden' },
-    progressBarFill: { height: '100%', backgroundColor: theme.colors.success, borderRadius: 4 },
-    progressText: { fontSize: 13, fontWeight: '600', color: theme.colors.success, textAlign: 'center', marginTop: 8 },
-    sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, paddingHorizontal: 16, marginBottom: 12 },
-    list: { paddingHorizontal: 16, paddingBottom: 40 },
-    card: {
+    filterLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 6, marginTop: 12 },
+    filterRow: { flexDirection: 'row', gap: 12 },
+    pickerContainer: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        backgroundColor: theme.colors.surface,
+        overflow: 'hidden',
+    },
+    sitePickerContainer: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        backgroundColor: theme.colors.surface,
+        overflow: 'hidden',
+    },
+    picker: { height: 50 },
+    applyButton: {
+        backgroundColor: theme.colors.primary,
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginTop: 16,
+    },
+    applyButtonText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+    tableHeader: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.error,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+    },
+    headerCell: { fontSize: 10, fontWeight: '700', color: '#FFFFFF', textTransform: 'uppercase', paddingHorizontal: 4 },
+    tableBody: { flex: 1 },
+    tableRow: {
+        flexDirection: 'row',
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
         backgroundColor: theme.colors.cardBg,
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 10,
-        borderLeftWidth: 3,
-        borderLeftColor: theme.colors.error,
+        alignItems: 'center',
     },
-    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-    materialName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
-    statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-    statusText: { fontSize: 11, fontWeight: '600' },
-    siteText: { fontSize: 13, color: theme.colors.textSecondary },
-    qtyText: { fontSize: 13, color: theme.colors.error, marginTop: 4 },
-    empty: { padding: 48, alignItems: 'center' },
-    emptyText: { fontSize: 16, color: theme.colors.textSecondary },
+    tableRowAlt: { backgroundColor: theme.colors.surface },
+    materialName: { fontSize: 12, fontWeight: '600', color: theme.colors.textPrimary, paddingHorizontal: 4 },
+    cell: { fontSize: 11, color: theme.colors.textPrimary, paddingHorizontal: 4 },
+    badge: {
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 4,
+    },
+    badgeText: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase' },
+    emptyState: { padding: 48, alignItems: 'center', width: 670 },
+    emptyText: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 12 },
+    emptySubtext: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
+    exportContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: 16,
+        backgroundColor: theme.colors.cardBg,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    exportButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.success,
+        paddingVertical: 14,
+        borderRadius: 10,
+        gap: 8,
+    },
+    exportButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
 });
