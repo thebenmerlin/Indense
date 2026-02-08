@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -10,10 +10,13 @@ import {
     Modal,
     TextInput,
     Platform,
+    ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../../src/context';
+import { authApi } from '../../src/api';
 
 const theme = {
     colors: {
@@ -43,8 +46,14 @@ const formatDate = (dateString: string | null | undefined) => {
     }
 };
 
+// Storage keys for auth
+const AUTH_KEYS = {
+    ACCESS_TOKEN: 'auth_access_token',
+    USER: 'auth_user',
+};
+
 export default function AccountScreen() {
-    const { user, logout } = useAuth();
+    const { user, logout, refreshAuth } = useAuth();
     const router = useRouter();
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
@@ -62,6 +71,21 @@ export default function AccountScreen() {
         phoneNumber: (user as any)?.phoneNumber || '',
     });
     const [saving, setSaving] = useState(false);
+
+    // Switch Sites states
+    const [showSitesModal, setShowSitesModal] = useState(false);
+    const [switchingSite, setSwitchingSite] = useState(false);
+    const userAny = user as any;
+    const assignedSites = userAny?.sites || [];
+
+    // Change Password states
+    const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [changingPassword, setChangingPassword] = useState(false);
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
 
     const handleLogout = () => {
         Alert.alert(
@@ -131,6 +155,61 @@ export default function AccountScreen() {
             Alert.alert('Error', 'Failed to update account information');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleSwitchSite = async (siteId: string, siteName: string) => {
+        if (siteId === userAny?.currentSiteId) {
+            setShowSitesModal(false);
+            return;
+        }
+
+        setSwitchingSite(true);
+        try {
+            const result = await authApi.switchSite(siteId);
+
+            // Update stored tokens and user
+            await SecureStore.setItemAsync(AUTH_KEYS.ACCESS_TOKEN, result.accessToken);
+            await SecureStore.setItemAsync(AUTH_KEYS.USER, JSON.stringify(result.user));
+
+            // Refresh auth context
+            await refreshAuth();
+
+            Alert.alert('Success', `Switched to ${siteName}`);
+            setShowSitesModal(false);
+        } catch (error: any) {
+            Alert.alert('Error', error?.response?.data?.message || 'Failed to switch site');
+        } finally {
+            setSwitchingSite(false);
+        }
+    };
+
+    const handleChangePassword = async () => {
+        if (!currentPassword.trim()) {
+            Alert.alert('Error', 'Please enter your current password');
+            return;
+        }
+        if (!newPassword.trim() || newPassword.length < 8) {
+            Alert.alert('Error', 'New password must be at least 8 characters');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert('Error', 'Passwords do not match');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            await authApi.changePassword(currentPassword, newPassword);
+            Alert.alert('Success', 'Password changed successfully');
+            setShowChangePasswordModal(false);
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (error: any) {
+            Alert.alert('Error', error?.response?.data?.message || 'Failed to change password');
+        } finally {
+            setChangingPassword(false);
         }
     };
 
@@ -241,7 +320,20 @@ export default function AccountScreen() {
                 <MenuItem
                     icon="location"
                     title={user?.siteName || 'No site assigned'}
-                    showArrow={false}
+                    subtitle={assignedSites.length > 1 ? `${assignedSites.length} sites assigned` : undefined}
+                    onPress={assignedSites.length > 1 ? () => setShowSitesModal(true) : undefined}
+                    showArrow={assignedSites.length > 1}
+                />
+            </View>
+
+            {/* Security Section */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Security</Text>
+                <MenuItem
+                    icon="lock-closed"
+                    title="Change Password"
+                    subtitle="Update your account password"
+                    onPress={() => setShowChangePasswordModal(true)}
                 />
             </View>
 
@@ -268,6 +360,7 @@ export default function AccountScreen() {
                     onPress={() => Alert.alert('Coming Soon', 'Notification settings will be available soon')}
                 />
             </View>
+
 
             {/* About */}
             <View style={styles.section}>
@@ -431,6 +524,168 @@ export default function AccountScreen() {
                             >
                                 <Text style={styles.modalDeleteText}>
                                     {deleting ? 'Deleting...' : 'Delete Forever'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Switch Sites Modal */}
+            <Modal
+                visible={showSitesModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowSitesModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.editModalContent}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.editModalTitle}>Switch Site</Text>
+                            <TouchableOpacity onPress={() => setShowSitesModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.editModalBody}>
+                            <Text style={styles.modalSubtitle}>Select the site you want to work on:</Text>
+                            {assignedSites.map((siteItem: any) => (
+                                <TouchableOpacity
+                                    key={siteItem.site?.id || siteItem.id}
+                                    style={[
+                                        styles.siteOption,
+                                        (siteItem.site?.id || siteItem.id) === userAny?.currentSiteId && styles.siteOptionSelected
+                                    ]}
+                                    onPress={() => handleSwitchSite(
+                                        siteItem.site?.id || siteItem.id,
+                                        siteItem.site?.name || siteItem.name
+                                    )}
+                                    disabled={switchingSite}
+                                >
+                                    <View style={styles.siteOptionContent}>
+                                        <Ionicons
+                                            name="location"
+                                            size={20}
+                                            color={(siteItem.site?.id || siteItem.id) === userAny?.currentSiteId
+                                                ? theme.colors.primary
+                                                : theme.colors.textSecondary}
+                                        />
+                                        <Text style={[
+                                            styles.siteOptionText,
+                                            (siteItem.site?.id || siteItem.id) === userAny?.currentSiteId && styles.siteOptionTextSelected
+                                        ]}>
+                                            {siteItem.site?.name || siteItem.name}
+                                        </Text>
+                                    </View>
+                                    {(siteItem.site?.id || siteItem.id) === userAny?.currentSiteId && (
+                                        <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                            {switchingSite && (
+                                <View style={styles.loadingOverlay}>
+                                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                                    <Text style={styles.loadingText}>Switching site...</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Change Password Modal */}
+            <Modal
+                visible={showChangePasswordModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowChangePasswordModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.editModalContent}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.editModalTitle}>Change Password</Text>
+                            <TouchableOpacity onPress={() => setShowChangePasswordModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.editModalBody}>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>Current Password</Text>
+                                <View style={styles.passwordInputRow}>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1 }]}
+                                        placeholder="Enter current password"
+                                        value={currentPassword}
+                                        onChangeText={setCurrentPassword}
+                                        secureTextEntry={!showCurrentPassword}
+                                    />
+                                    <TouchableOpacity
+                                        style={styles.eyeButton}
+                                        onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                                    >
+                                        <Ionicons
+                                            name={showCurrentPassword ? 'eye-off' : 'eye'}
+                                            size={20}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>New Password</Text>
+                                <View style={styles.passwordInputRow}>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1 }]}
+                                        placeholder="Enter new password (min 8 chars)"
+                                        value={newPassword}
+                                        onChangeText={setNewPassword}
+                                        secureTextEntry={!showNewPassword}
+                                    />
+                                    <TouchableOpacity
+                                        style={styles.eyeButton}
+                                        onPress={() => setShowNewPassword(!showNewPassword)}
+                                    >
+                                        <Ionicons
+                                            name={showNewPassword ? 'eye-off' : 'eye'}
+                                            size={20}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>Confirm New Password</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Confirm new password"
+                                    value={confirmPassword}
+                                    onChangeText={setConfirmPassword}
+                                    secureTextEntry
+                                />
+                            </View>
+                        </ScrollView>
+
+                        <View style={styles.editModalFooter}>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => {
+                                    setShowChangePasswordModal(false);
+                                    setCurrentPassword('');
+                                    setNewPassword('');
+                                    setConfirmPassword('');
+                                }}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.saveButton, changingPassword && styles.saveButtonDisabled]}
+                                onPress={handleChangePassword}
+                                disabled={changingPassword}
+                            >
+                                <Text style={styles.saveButtonText}>
+                                    {changingPassword ? 'Changing...' : 'Change Password'}
                                 </Text>
                             </TouchableOpacity>
                         </View>
@@ -752,5 +1007,60 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#FFFFFF',
+    },
+    // Switch Sites Modal styles
+    modalSubtitle: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: 16,
+    },
+    siteOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: theme.colors.surface,
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 8,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    siteOptionSelected: {
+        borderColor: theme.colors.primary,
+        backgroundColor: theme.colors.primary + '10',
+    },
+    siteOptionContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    siteOptionText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: theme.colors.textPrimary,
+    },
+    siteOptionTextSelected: {
+        color: theme.colors.primary,
+        fontWeight: '600',
+    },
+    loadingOverlay: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 24,
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    // Change Password Modal styles
+    passwordInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    eyeButton: {
+        position: 'absolute',
+        right: 12,
+        padding: 4,
     },
 });

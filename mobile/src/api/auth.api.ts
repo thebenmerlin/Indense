@@ -6,6 +6,11 @@ export interface SwitchRoleResponse {
     user: LoginResponse['user'];
 }
 
+export interface SwitchSiteResponse {
+    accessToken: string;
+    user: LoginResponse['user'];
+}
+
 export const authApi = {
     async login(email: string, password: string): Promise<LoginResponse> {
         const response = await apiClient.post('/auth/login', { email, password });
@@ -32,6 +37,11 @@ export const authApi = {
 
     async switchRole(role: 'SITE_ENGINEER' | 'PURCHASE_TEAM' | 'DIRECTOR'): Promise<SwitchRoleResponse> {
         const response = await apiClient.post('/auth/switch-role', { role });
+        return response.data.data;
+    },
+
+    async switchSite(siteId: string): Promise<SwitchSiteResponse> {
+        const response = await apiClient.post('/auth/switch-site', { siteId });
         return response.data.data;
     },
 };
