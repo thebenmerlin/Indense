@@ -295,6 +295,9 @@ class ReturnsService {
             throw new ForbiddenError('Access denied to this damage report');
         }
 
+        // Store relative path for URL construction
+        const relativePath = `damages/${file.filename}`;
+
         const image = await prisma.damageImage.create({
             data: {
                 damageReportId,
@@ -302,7 +305,7 @@ class ReturnsService {
                 originalName: file.originalname,
                 mimeType: file.mimetype,
                 size: file.size,
-                path: file.path,
+                path: relativePath,
             },
         });
 

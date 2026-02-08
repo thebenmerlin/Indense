@@ -4,9 +4,14 @@ import { storage } from '../utils/storage';
 // Configure base URL - update this to your actual server IP/URL
 // For Android emulator: use 10.0.2.2 instead of localhost
 // For physical device: use your computer's local IP address
-const BASE_URL = __DEV__
+export const BASE_URL = __DEV__
     ? 'http://192.168.0.105:3000/api/v1'  // Your local machine IP
     : 'https://indense.onrender.com/api/v1';  // Production Render backend
+
+// Base URL for uploads (without /api/v1)
+export const UPLOADS_URL = __DEV__
+    ? 'http://192.168.0.105:3000/uploads'  // Your local machine IP
+    : 'https://indense.onrender.com/uploads';  // Production Render backend
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({

@@ -358,8 +358,12 @@ export default function ProcessOrder() {
                                 <View style={styles.materialHeader}>
                                     <Text style={styles.materialModalName}>{selectedItem.materialName}</Text>
                                     <Text style={styles.materialModalCode}>{selectedItem.materialCode}</Text>
-                                    {selectedItem.specifications && (
-                                        <Text style={styles.materialSpecs}>{selectedItem.specifications}</Text>
+                                    {selectedItem.indentItem?.specifications && (
+                                        <Text style={styles.materialSpecs}>
+                                            {Object.entries(selectedItem.indentItem.specifications)
+                                                .map(([key, value]) => `${key}: ${value}`)
+                                                .join(', ')}
+                                        </Text>
                                     )}
                                 </View>
 

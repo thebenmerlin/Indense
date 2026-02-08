@@ -1,7 +1,9 @@
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path';
 import { config } from './config';
+import { storageConfig } from './config/storage';
 import { errorHandler, notFoundHandler, auditRequest } from './middleware';
 import { logger } from './utils/logger';
 
@@ -36,6 +38,9 @@ export function createApp(): Application {
     // Body parsing
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
+
+    // Serve uploaded files statically
+    app.use('/uploads', express.static(storageConfig.uploadDir));
 
     // Request logging
     app.use(auditRequest());

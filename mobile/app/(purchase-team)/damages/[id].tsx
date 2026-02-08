@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { damagesApi } from '../../../src/api';
+import { UPLOADS_URL } from '../../../src/api/client';
 import { DamageReport } from '../../../src/types';
 
 const theme = {
@@ -37,6 +38,14 @@ const getSeverityColor = (severity: string) => {
         case 'MINOR': return theme.colors.textSecondary;
         default: return theme.colors.textSecondary;
     }
+};
+
+// Helper to construct full image URL from relative path
+const getImageUrl = (imagePath: string) => {
+    // If already a full URL, return as-is
+    if (imagePath.startsWith('http')) return imagePath;
+    // Otherwise construct URL from relative path (e.g., "damages/filename.jpg")
+    return `${UPLOADS_URL}/${imagePath}`;
 };
 
 export default function DamageDetail() {
@@ -92,9 +101,7 @@ export default function DamageDetail() {
     };
 
     const openImageModal = (imagePath: string) => {
-        // Convert path to full URL if needed
-        const imageUrl = imagePath.startsWith('http') ? imagePath : `https://your-server.com/${imagePath}`;
-        setSelectedImage(imageUrl);
+        setSelectedImage(getImageUrl(imagePath));
         setShowImageModal(true);
     };
 
@@ -132,7 +139,7 @@ export default function DamageDetail() {
                         </View>
                     </View>
                     <Text style={styles.indentNumber}>{damage.indent?.indentNumber}</Text>
-                    
+
                     <View style={styles.infoRow}>
                         <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
                         <Text style={styles.infoText}>{damage.site?.name}</Text>
@@ -193,15 +200,20 @@ export default function DamageDetail() {
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Photos ({damage.images.length})</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
-                            {damage.images.map((image) => (
+                            {damage.images.map((image, index) => (
                                 <TouchableOpacity
                                     key={image.id}
                                     onPress={() => openImageModal(image.path)}
+                                    style={styles.imageContainer}
                                 >
                                     <Image
-                                        source={{ uri: image.path }}
+                                        source={{ uri: getImageUrl(image.path) }}
                                         style={styles.imageThumbnail}
                                     />
+                                    <View style={styles.imageOverlay}>
+                                        <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
+                                        <Text style={styles.imageViewText}>View {index + 1}</Text>
+                                    </View>
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
@@ -346,11 +358,33 @@ const styles = StyleSheet.create({
     },
     descriptionText: { fontSize: 14, color: theme.colors.textPrimary, lineHeight: 22 },
     imagesScroll: { marginTop: 8 },
+    imageContainer: {
+        position: 'relative',
+        marginRight: 12,
+    },
     imageThumbnail: {
         width: 100,
         height: 100,
         borderRadius: 8,
-        marginRight: 12,
+    },
+    imageOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 4,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+        gap: 4,
+    },
+    imageViewText: {
+        color: '#FFFFFF',
+        fontSize: 11,
+        fontWeight: '600',
     },
     bottomButtons: {
         position: 'absolute',
