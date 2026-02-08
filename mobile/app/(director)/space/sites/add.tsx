@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -10,11 +10,12 @@ import {
     Modal,
     FlatList,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { sitesApi, usersApi, SiteEngineer, User } from '../../../../src/api';
+import { sitesApi, usersApi, SiteEngineer } from '../../../../src/api';
 
 const theme = {
     colors: {
@@ -30,11 +31,10 @@ const theme = {
     }
 };
 
-export default function AddSite() {
+export default function AddSitePage() {
     const router = useRouter();
-    const { edit } = useLocalSearchParams<{ edit?: string }>();
-    const isEditing = !!edit;
 
+    // Form fields
     const [name, setName] = useState('');
     const [code, setCode] = useState('');
     const [city, setCity] = useState('');
@@ -42,33 +42,33 @@ export default function AddSite() {
     const [address, setAddress] = useState('');
     const [startDate, setStartDate] = useState<Date | null>(null);
     const [expectedHandover, setExpectedHandover] = useState<Date | null>(null);
-    const [engineers, setEngineers] = useState<SiteEngineer[]>([]);
+    const [selectedEngineers, setSelectedEngineers] = useState<SiteEngineer[]>([]);
+
+    // UI state
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showHandoverPicker, setShowHandoverPicker] = useState(false);
-    const [showEngineerPicker, setShowEngineerPicker] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [loadingEngineers, setLoadingEngineers] = useState(false);
+    const [showEngineerModal, setShowEngineerModal] = useState(false);
     const [availableEngineers, setAvailableEngineers] = useState<SiteEngineer[]>([]);
+    const [loadingEngineers, setLoadingEngineers] = useState(false);
+    const [saving, setSaving] = useState(false);
 
-    // Fetch available engineers (all site engineers)
-    const fetchAvailableEngineers = async () => {
-        setLoadingEngineers(true);
-        try {
-            const users = await usersApi.getByRole('SITE_ENGINEER');
-            // Filter out already selected engineers
-            const selectedIds = new Set(engineers.map(e => e.id));
-            const available = users
-                .filter(u => !u.isRevoked && !selectedIds.has(u.id))
-                .map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone }));
-            setAvailableEngineers(available);
-        } catch (error) {
-            console.error('Failed to fetch engineers:', error);
-        } finally {
-            setLoadingEngineers(false);
+    // Auto-generate code from name
+    const handleNameChange = (text: string) => {
+        setName(text);
+        // Generate code from first letters of words
+        const words = text.trim().split(/\s+/);
+        let generatedCode = words
+            .slice(0, 3)
+            .map(w => w.charAt(0).toUpperCase())
+            .join('');
+        if (generatedCode.length < 2 && words[0]) {
+            generatedCode = words[0].substring(0, 3).toUpperCase();
         }
+        setCode(generatedCode);
     };
 
-    const formatDate = (date: Date | null) => {
+    // Format date for display
+    const formatDate = (date: Date | null): string => {
         if (!date) return 'Select date';
         return date.toLocaleDateString('en-IN', {
             day: '2-digit',
@@ -77,57 +77,61 @@ export default function AddSite() {
         });
     };
 
-    const handleAddEngineer = (engineer: SiteEngineer) => {
-        if (!engineers.find(e => e.id === engineer.id)) {
-            setEngineers([...engineers, engineer]);
-            setAvailableEngineers(prev => prev.filter(e => e.id !== engineer.id));
+    // Fetch available engineers
+    const fetchEngineers = useCallback(async () => {
+        setLoadingEngineers(true);
+        try {
+            const users = await usersApi.getByRole('SITE_ENGINEER');
+            const selectedIds = new Set(selectedEngineers.map(e => e.id));
+            const available = users
+                .filter(u => !u.isRevoked && !selectedIds.has(u.id))
+                .map(u => ({
+                    id: u.id,
+                    name: u.name,
+                    email: u.email,
+                    phone: u.phone,
+                }));
+            setAvailableEngineers(available);
+        } catch (error) {
+            console.error('Failed to fetch engineers:', error);
+            Alert.alert('Error', 'Failed to load engineers');
+        } finally {
+            setLoadingEngineers(false);
         }
-        setShowEngineerPicker(false);
+    }, [selectedEngineers]);
+
+    const openEngineerModal = () => {
+        fetchEngineers();
+        setShowEngineerModal(true);
     };
 
-    const handleRemoveEngineer = (id: string) => {
-        const removed = engineers.find(e => e.id === id);
-        setEngineers(engineers.filter(e => e.id !== id));
+    const handleAddEngineer = (engineer: SiteEngineer) => {
+        setSelectedEngineers(prev => [...prev, engineer]);
+        setAvailableEngineers(prev => prev.filter(e => e.id !== engineer.id));
+        setShowEngineerModal(false);
+    };
+
+    const handleRemoveEngineer = (engineerId: string) => {
+        const removed = selectedEngineers.find(e => e.id === engineerId);
+        setSelectedEngineers(prev => prev.filter(e => e.id !== engineerId));
         if (removed) {
             setAvailableEngineers(prev => [...prev, removed]);
         }
     };
 
-    const generateCode = (siteName: string) => {
-        // Generate a code from the site name (first letters of each word, uppercase)
-        const words = siteName.trim().split(/\s+/);
-        let generatedCode = words
-            .slice(0, 3)
-            .map(w => w.charAt(0).toUpperCase())
-            .join('');
-        
-        // If code is too short, pad with more characters
-        if (generatedCode.length < 2 && words[0]) {
-            generatedCode = words[0].substring(0, 3).toUpperCase();
-        }
-        
-        return generatedCode;
-    };
-
-    const handleNameChange = (text: string) => {
-        setName(text);
-        // Auto-generate code if not manually edited
-        if (!isEditing) {
-            setCode(generateCode(text));
-        }
-    };
-
+    // Save the site
     const handleSave = async () => {
+        // Validation
         if (!name.trim()) {
-            Alert.alert('Error', 'Please enter the project name');
+            Alert.alert('Required', 'Please enter the project name');
             return;
         }
         if (!code.trim()) {
-            Alert.alert('Error', 'Please enter the site code');
+            Alert.alert('Required', 'Please enter the site code');
             return;
         }
         if (!city.trim()) {
-            Alert.alert('Error', 'Please enter the city');
+            Alert.alert('Required', 'Please enter the city');
             return;
         }
 
@@ -141,27 +145,24 @@ export default function AddSite() {
                 address: address.trim() || undefined,
                 startDate: startDate?.toISOString(),
                 expectedHandoverDate: expectedHandover?.toISOString(),
-                engineerIds: engineers.map(e => e.id),
+                engineerIds: selectedEngineers.map(e => e.id),
             });
+
             Alert.alert('Success', 'Site created successfully', [
                 { text: 'OK', onPress: () => router.back() }
             ]);
         } catch (error: any) {
-            const message = error.response?.data?.message || 'Failed to save site';
+            console.error('Failed to create site:', error);
+            const message = error?.response?.data?.message || 'Failed to create site';
             Alert.alert('Error', message);
         } finally {
             setSaving(false);
         }
     };
 
-    const openEngineerPicker = () => {
-        fetchAvailableEngineers();
-        setShowEngineerPicker(true);
-    };
-
     return (
         <View style={styles.container}>
-            <ScrollView style={styles.scrollView}>
+            <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
                 {/* Project Name */}
                 <View style={styles.field}>
                     <Text style={styles.label}>Name of the Project *</Text>
@@ -181,7 +182,7 @@ export default function AddSite() {
                         style={styles.input}
                         placeholder="e.g., GVR"
                         value={code}
-                        onChangeText={(text) => setCode(text.toUpperCase())}
+                        onChangeText={(t) => setCode(t.toUpperCase())}
                         placeholderTextColor={theme.colors.textSecondary}
                         autoCapitalize="characters"
                         maxLength={10}
@@ -190,7 +191,7 @@ export default function AddSite() {
 
                 {/* City */}
                 <View style={styles.field}>
-                    <Text style={styles.label}>City *</Text>
+                    <Text style={styles.label}>Site Location (City) *</Text>
                     <TextInput
                         style={styles.input}
                         placeholder="Enter city"
@@ -214,7 +215,7 @@ export default function AddSite() {
 
                 {/* Address */}
                 <View style={styles.field}>
-                    <Text style={styles.label}>Address</Text>
+                    <Text style={styles.label}>Full Address</Text>
                     <TextInput
                         style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
                         placeholder="Enter full address"
@@ -246,26 +247,26 @@ export default function AddSite() {
                 {/* Add Site Engineers */}
                 <View style={styles.field}>
                     <Text style={styles.label}>Site Engineers</Text>
-                    <TouchableOpacity style={styles.addEngineerButton} onPress={openEngineerPicker}>
+                    <TouchableOpacity style={styles.addEngineerBtn} onPress={openEngineerModal}>
                         <Ionicons name="add-circle-outline" size={20} color={theme.colors.primary} />
                         <Text style={styles.addEngineerText}>Add Site Engineer</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Engineers List */}
-                {engineers.length > 0 && (
+                {/* Selected Engineers List */}
+                {selectedEngineers.length > 0 && (
                     <View style={styles.engineersList}>
                         <Text style={styles.subLabel}>Assigned Engineers</Text>
-                        {engineers.map(engineer => (
-                            <View key={engineer.id} style={styles.engineerItem}>
-                                <View style={styles.engineerAvatar}>
-                                    <Text style={styles.avatarText}>{engineer.name.charAt(0)}</Text>
+                        {selectedEngineers.map(eng => (
+                            <View key={eng.id} style={styles.engineerRow}>
+                                <View style={styles.avatar}>
+                                    <Text style={styles.avatarText}>{eng.name.charAt(0)}</Text>
                                 </View>
                                 <View style={styles.engineerInfo}>
-                                    <Text style={styles.engineerName}>{engineer.name}</Text>
-                                    <Text style={styles.engineerEmail}>{engineer.email}</Text>
+                                    <Text style={styles.engineerName}>{eng.name}</Text>
+                                    <Text style={styles.engineerEmail}>{eng.email}</Text>
                                 </View>
-                                <TouchableOpacity onPress={() => handleRemoveEngineer(engineer.id)}>
+                                <TouchableOpacity onPress={() => handleRemoveEngineer(eng.id)}>
                                     <Ionicons name="close-circle" size={22} color={theme.colors.error} />
                                 </TouchableOpacity>
                             </View>
@@ -279,11 +280,15 @@ export default function AddSite() {
             {/* Save Button */}
             <View style={styles.footer}>
                 <TouchableOpacity
-                    style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                    style={[styles.saveButton, saving && { opacity: 0.6 }]}
                     onPress={handleSave}
                     disabled={saving}
                 >
-                    <Text style={styles.saveButtonText}>{saving ? 'Saving...' : (isEditing ? 'Update Site' : 'Save Site')}</Text>
+                    {saving ? (
+                        <ActivityIndicator color="#FFF" />
+                    ) : (
+                        <Text style={styles.saveButtonText}>Save Site</Text>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -292,8 +297,8 @@ export default function AddSite() {
                 <DateTimePicker
                     value={startDate || new Date()}
                     mode="date"
-                    display="default"
-                    onChange={(event, date) => {
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(_, date) => {
                         setShowStartPicker(false);
                         if (date) setStartDate(date);
                     }}
@@ -303,48 +308,48 @@ export default function AddSite() {
                 <DateTimePicker
                     value={expectedHandover || new Date()}
                     mode="date"
-                    display="default"
-                    onChange={(event, date) => {
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(_, date) => {
                         setShowHandoverPicker(false);
                         if (date) setExpectedHandover(date);
                     }}
                 />
             )}
 
-            {/* Engineer Picker Modal */}
-            <Modal visible={showEngineerPicker} animationType="slide" presentationStyle="pageSheet">
+            {/* Engineer Selection Modal */}
+            <Modal visible={showEngineerModal} animationType="slide" presentationStyle="pageSheet">
                 <View style={styles.modal}>
                     <View style={styles.modalHeader}>
                         <Text style={styles.modalTitle}>Select Engineer</Text>
-                        <TouchableOpacity onPress={() => setShowEngineerPicker(false)}>
+                        <TouchableOpacity onPress={() => setShowEngineerModal(false)}>
                             <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
                         </TouchableOpacity>
                     </View>
                     {loadingEngineers ? (
-                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                        <View style={styles.centered}>
                             <ActivityIndicator size="large" color={theme.colors.primary} />
                         </View>
                     ) : (
-                    <FlatList
-                        data={availableEngineers}
-                        keyExtractor={item => item.id}
-                        contentContainerStyle={{ padding: 16 }}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity style={styles.engineerOption} onPress={() => handleAddEngineer(item)}>
-                                <View style={styles.engineerAvatar}>
-                                    <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-                                </View>
-                                <View style={styles.engineerInfo}>
-                                    <Text style={styles.engineerName}>{item.name}</Text>
-                                    <Text style={styles.engineerEmail}>{item.email}</Text>
-                                </View>
-                                <Ionicons name="add-circle" size={24} color={theme.colors.success} />
-                            </TouchableOpacity>
-                        )}
-                        ListEmptyComponent={
-                            <Text style={styles.emptyText}>No available engineers to assign</Text>
-                        }
-                    />
+                        <FlatList
+                            data={availableEngineers}
+                            keyExtractor={(item) => item.id}
+                            contentContainerStyle={{ padding: 16 }}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity style={styles.engineerOption} onPress={() => handleAddEngineer(item)}>
+                                    <View style={styles.avatar}>
+                                        <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+                                    </View>
+                                    <View style={styles.engineerInfo}>
+                                        <Text style={styles.engineerName}>{item.name}</Text>
+                                        <Text style={styles.engineerEmail}>{item.email}</Text>
+                                    </View>
+                                    <Ionicons name="add-circle" size={24} color={theme.colors.success} />
+                                </TouchableOpacity>
+                            )}
+                            ListEmptyComponent={
+                                <Text style={styles.emptyText}>No available engineers to assign</Text>
+                            }
+                        />
                     )}
                 </View>
             </Modal>
@@ -355,6 +360,8 @@ export default function AddSite() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
     scrollView: { flex: 1, padding: 16 },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
     field: { marginBottom: 20 },
     label: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 8 },
     subLabel: { fontSize: 13, fontWeight: '500', color: theme.colors.textSecondary, marginBottom: 12 },
@@ -367,6 +374,7 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.border,
         color: theme.colors.textPrimary,
     },
+
     dateButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -378,7 +386,8 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     dateText: { fontSize: 16, color: theme.colors.textPrimary },
-    addEngineerButton: {
+
+    addEngineerBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -390,20 +399,21 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     addEngineerText: { fontSize: 15, fontWeight: '500', color: theme.colors.primary },
+
     engineersList: {
         backgroundColor: theme.colors.cardBg,
         borderRadius: 12,
         padding: 16,
         marginBottom: 20,
     },
-    engineerItem: {
+    engineerRow: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 10,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    engineerAvatar: {
+    avatar: {
         width: 40,
         height: 40,
         borderRadius: 20,
@@ -416,6 +426,7 @@ const styles = StyleSheet.create({
     engineerInfo: { flex: 1 },
     engineerName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
     engineerEmail: { fontSize: 13, color: theme.colors.textSecondary },
+
     footer: {
         padding: 16,
         backgroundColor: theme.colors.cardBg,
@@ -428,8 +439,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
     },
-    saveButtonDisabled: { opacity: 0.6 },
     saveButtonText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
+
     modal: { flex: 1, backgroundColor: theme.colors.surface },
     modalHeader: {
         flexDirection: 'row',

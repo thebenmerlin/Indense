@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { usersApi, User } from '../../../../../src/api/users.api';
 
@@ -29,23 +30,28 @@ export default function PurchaseTeamList() {
     const [members, setMembers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
     const fetchMembers = useCallback(async () => {
         try {
+            setError(null);
             const data = await usersApi.getByRole('PURCHASE_TEAM');
             setMembers(data);
-        } catch (error) {
-            console.error('Failed to fetch purchase team:', error);
+        } catch (err: any) {
+            console.error('Failed to fetch purchase team:', err);
+            setError(err?.message || 'Failed to load purchase team');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchMembers();
-    }, [fetchMembers]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchMembers();
+        }, [fetchMembers])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -82,6 +88,18 @@ export default function PurchaseTeamList() {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+        );
+    }
+
+    if (error) {
+        return (
+            <View style={styles.loadingContainer}>
+                <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
+                <Text style={{ color: theme.colors.error, marginTop: 12 }}>{error}</Text>
+                <TouchableOpacity onPress={fetchMembers} style={{ marginTop: 16, padding: 12, backgroundColor: theme.colors.primary, borderRadius: 8 }}>
+                    <Text style={{ color: '#FFF', fontWeight: '600' }}>Retry</Text>
+                </TouchableOpacity>
             </View>
         );
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     View,
     Text,
@@ -14,8 +14,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { sitesApi, SiteDetail as SiteDetailType } from '../../../../src/api/sites.api';
-import { usersApi, UserResponse } from '../../../../src/api/users.api';
+import { sitesApi, SiteWithEngineers, SiteEngineer } from '../../../../src/api';
 
 const theme = {
     colors: {
@@ -32,41 +31,43 @@ const theme = {
     }
 };
 
-interface SiteEngineer {
-    id: string;
-    name: string;
-    email: string;
-}
-
-export default function SiteDetail() {
+export default function SiteDetailPage() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const [site, setSite] = useState<SiteDetailType | null>(null);
+
+    // Data state
+    const [site, setSite] = useState<SiteWithEngineers | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Engineer management
     const [editMode, setEditMode] = useState(false);
-    const [showActions, setShowActions] = useState(false);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-    const [confirmText, setConfirmText] = useState('');
     const [engineers, setEngineers] = useState<SiteEngineer[]>([]);
     const [originalEngineers, setOriginalEngineers] = useState<SiteEngineer[]>([]);
     const [availableEngineers, setAvailableEngineers] = useState<SiteEngineer[]>([]);
     const [showAddEngineer, setShowAddEngineer] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    // Actions
+    const [showActions, setShowActions] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+    const [confirmText, setConfirmText] = useState('');
+
+    // Fetch site details
     const fetchSite = useCallback(async () => {
         if (!id) return;
         try {
             const data = await sitesApi.getDetails(id);
             setSite(data);
-            const engineerList = data.engineers?.map(e => ({
+            const engList = (data.engineers || []).map(e => ({
                 id: e.id,
                 name: e.name,
-                email: e.email
-            })) || [];
-            setEngineers(engineerList);
-            setOriginalEngineers(engineerList);
+                email: e.email,
+                phone: e.phone,
+            }));
+            setEngineers(engList);
+            setOriginalEngineers(engList);
         } catch (error) {
             console.error('Failed to fetch site:', error);
             Alert.alert('Error', 'Failed to load site details');
@@ -76,15 +77,12 @@ export default function SiteDetail() {
         }
     }, [id]);
 
+    // Fetch available engineers for adding
     const fetchAvailableEngineers = useCallback(async () => {
         if (!id) return;
         try {
             const data = await sitesApi.getAvailableEngineers(id);
-            setAvailableEngineers(data.map(e => ({
-                id: e.id,
-                name: e.name,
-                email: e.email
-            })));
+            setAvailableEngineers(data);
         } catch (error) {
             console.error('Failed to fetch available engineers:', error);
         }
@@ -100,12 +98,12 @@ export default function SiteDetail() {
         }
     }, [editMode, fetchAvailableEngineers]);
 
-    const onRefresh = useCallback(() => {
+    const onRefresh = () => {
         setRefreshing(true);
         fetchSite();
-    }, [fetchSite]);
+    };
 
-    const formatDate = (dateStr: string | null | undefined) => {
+    const formatDate = (dateStr: string | null | undefined): string => {
         if (!dateStr) return '-';
         return new Date(dateStr).toLocaleDateString('en-IN', {
             day: '2-digit',
@@ -114,9 +112,8 @@ export default function SiteDetail() {
         });
     };
 
-    const handleRemoveEngineer = async (engineerId: string) => {
-        if (!id) return;
-        // Optimistically update UI
+    // Engineer management handlers
+    const handleRemoveEngineer = (engineerId: string) => {
         const removed = engineers.find(e => e.id === engineerId);
         setEngineers(prev => prev.filter(e => e.id !== engineerId));
         if (removed) {
@@ -124,7 +121,7 @@ export default function SiteDetail() {
         }
     };
 
-    const handleAddEngineer = async (engineer: SiteEngineer) => {
+    const handleAddEngineer = (engineer: SiteEngineer) => {
         setEngineers(prev => [...prev, engineer]);
         setAvailableEngineers(prev => prev.filter(e => e.id !== engineer.id));
         setShowAddEngineer(false);
@@ -134,14 +131,12 @@ export default function SiteDetail() {
         if (!id) return;
         setSaving(true);
         try {
-            const engineerIds = engineers.map(e => e.id);
-            await sitesApi.assignEngineers(id, engineerIds);
+            await sitesApi.assignEngineers(id, engineers.map(e => e.id));
             setOriginalEngineers(engineers);
             setEditMode(false);
-            Alert.alert('Success', 'Site engineers updated successfully');
+            Alert.alert('Success', 'Engineers updated successfully');
         } catch (error: any) {
             Alert.alert('Error', error?.message || 'Failed to update engineers');
-            // Revert to original
             setEngineers(originalEngineers);
         } finally {
             setSaving(false);
@@ -153,10 +148,15 @@ export default function SiteDetail() {
         setEngineers(originalEngineers);
     };
 
+    // Site actions
+    const navigateToIndents = () => {
+        router.push(`/(director)/indents/all?siteId=${id}` as any);
+    };
+
     const handleDeleteSite = async () => {
         if (!id || !site) return;
         if (confirmText.toLowerCase() !== site.city?.toLowerCase()) {
-            Alert.alert('Error', 'Please type the site location correctly to confirm');
+            Alert.alert('Error', 'Please type the site location correctly');
             return;
         }
         try {
@@ -172,7 +172,7 @@ export default function SiteDetail() {
     const handleCloseSite = async () => {
         if (!id || !site) return;
         if (confirmText.toLowerCase() !== site.city?.toLowerCase()) {
-            Alert.alert('Error', 'Please type the site location correctly to confirm');
+            Alert.alert('Error', 'Please type the site location correctly');
             return;
         }
         try {
@@ -185,14 +185,9 @@ export default function SiteDetail() {
         }
     };
 
-    const navigateToIndents = () => {
-        // Navigate to indents with site filter
-        router.push(`/(director)/indents/all?siteId=${id}` as any);
-    };
-
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
+            <View style={styles.centered}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
             </View>
         );
@@ -200,19 +195,21 @@ export default function SiteDetail() {
 
     if (!site) {
         return (
-            <View style={styles.loadingContainer}>
+            <View style={styles.centered}>
+                <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
                 <Text style={styles.errorText}>Site not found</Text>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <Text style={styles.backBtnText}>Go Back</Text>
+                </TouchableOpacity>
             </View>
         );
     }
 
     return (
         <View style={styles.container}>
-            <ScrollView 
+            <ScrollView
                 style={styles.scrollView}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
                 {/* Site Info Card */}
                 <View style={styles.infoCard}>
@@ -223,7 +220,7 @@ export default function SiteDetail() {
                         <View style={styles.infoItem}>
                             <Ionicons name="location-outline" size={18} color={theme.colors.accent} />
                             <Text style={styles.infoLabel}>Location</Text>
-                            <Text style={styles.infoValue}>{site.city}, {site.state}</Text>
+                            <Text style={styles.infoValue}>{site.city || '-'}{site.state ? `, ${site.state}` : ''}</Text>
                         </View>
                         <View style={styles.infoItem}>
                             <Ionicons name="calendar-outline" size={18} color={theme.colors.accent} />
@@ -237,8 +234,8 @@ export default function SiteDetail() {
                         </View>
                         <TouchableOpacity style={styles.infoItem} onPress={navigateToIndents}>
                             <Ionicons name="document-text-outline" size={18} color={theme.colors.primary} />
-                            <Text style={styles.infoLabel}>Indents</Text>
-                            <Text style={[styles.infoValue, styles.clickableValue]}>{site.indentCount ?? 0}</Text>
+                            <Text style={styles.infoLabel}>No. of Indents</Text>
+                            <Text style={[styles.infoValue, styles.clickable]}>{site.indentCount ?? 0}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -248,36 +245,37 @@ export default function SiteDetail() {
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Site Engineers at {site.name}</Text>
                         {!editMode ? (
-                            <TouchableOpacity onPress={() => setEditMode(true)} style={styles.editButton}>
+                            <TouchableOpacity onPress={() => setEditMode(true)} style={styles.editBtn}>
                                 <Ionicons name="pencil" size={16} color={theme.colors.primary} />
                             </TouchableOpacity>
                         ) : (
                             <View style={styles.editActions}>
-                                <TouchableOpacity onPress={handleCancelEdit} style={styles.cancelButton}>
-                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                <TouchableOpacity onPress={handleCancelEdit} style={styles.cancelBtn}>
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={handleSaveEngineers} style={styles.saveButton} disabled={saving}>
+                                <TouchableOpacity onPress={handleSaveEngineers} style={styles.saveBtn} disabled={saving}>
                                     {saving ? (
                                         <ActivityIndicator size="small" color="#FFF" />
                                     ) : (
-                                        <Text style={styles.saveButtonText}>Save</Text>
+                                        <Text style={styles.saveBtnText}>Save</Text>
                                     )}
                                 </TouchableOpacity>
                             </View>
                         )}
                     </View>
 
-                    {engineers.map(engineer => (
-                        <View key={engineer.id} style={styles.engineerCard}>
-                            <View style={styles.engineerAvatar}>
-                                <Text style={styles.avatarText}>{engineer.name.charAt(0)}</Text>
+                    {/* Engineers List */}
+                    {engineers.map(eng => (
+                        <View key={eng.id} style={styles.engineerCard}>
+                            <View style={styles.avatar}>
+                                <Text style={styles.avatarText}>{eng.name.charAt(0)}</Text>
                             </View>
                             <View style={styles.engineerInfo}>
-                                <Text style={styles.engineerName}>{engineer.name}</Text>
-                                <Text style={styles.engineerEmail}>{engineer.email}</Text>
+                                <Text style={styles.engineerName}>{eng.name}</Text>
+                                <Text style={styles.engineerEmail}>{eng.email}</Text>
                             </View>
                             {editMode && (
-                                <TouchableOpacity onPress={() => handleRemoveEngineer(engineer.id)} style={styles.removeButton}>
+                                <TouchableOpacity onPress={() => handleRemoveEngineer(eng.id)}>
                                     <Ionicons name="remove-circle" size={24} color={theme.colors.error} />
                                 </TouchableOpacity>
                             )}
@@ -285,7 +283,7 @@ export default function SiteDetail() {
                     ))}
 
                     {editMode && (
-                        <TouchableOpacity style={styles.addEngineerButton} onPress={() => setShowAddEngineer(true)}>
+                        <TouchableOpacity style={styles.addEngineerBtn} onPress={() => setShowAddEngineer(true)}>
                             <Ionicons name="add-circle-outline" size={20} color={theme.colors.primary} />
                             <Text style={styles.addEngineerText}>Add Site Engineer</Text>
                         </TouchableOpacity>
@@ -309,15 +307,27 @@ export default function SiteDetail() {
             <Modal visible={showActions} transparent animationType="fade">
                 <TouchableOpacity style={styles.overlay} onPress={() => setShowActions(false)}>
                     <View style={styles.popup}>
-                        <TouchableOpacity style={styles.popupItem} onPress={() => { setShowActions(false); router.push(`/(director)/space/sites/add?edit=${id}` as any); }}>
+                        <TouchableOpacity
+                            style={styles.popupItem}
+                            onPress={() => {
+                                setShowActions(false);
+                                router.push(`/(director)/space/sites/add?edit=${id}` as any);
+                            }}
+                        >
                             <Ionicons name="create-outline" size={20} color={theme.colors.textPrimary} />
                             <Text style={styles.popupText}>Edit Site</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.popupItem} onPress={() => { setShowActions(false); setShowCloseConfirm(true); }}>
+                        <TouchableOpacity
+                            style={styles.popupItem}
+                            onPress={() => { setShowActions(false); setConfirmText(''); setShowCloseConfirm(true); }}
+                        >
                             <Ionicons name="lock-closed-outline" size={20} color={theme.colors.warning} />
                             <Text style={[styles.popupText, { color: theme.colors.warning }]}>Close Site</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.popupItem} onPress={() => { setShowActions(false); setShowDeleteConfirm(true); }}>
+                        <TouchableOpacity
+                            style={styles.popupItem}
+                            onPress={() => { setShowActions(false); setConfirmText(''); setShowDeleteConfirm(true); }}
+                        >
                             <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
                             <Text style={[styles.popupText, { color: theme.colors.error }]}>Delete Site</Text>
                         </TouchableOpacity>
@@ -329,12 +339,12 @@ export default function SiteDetail() {
             <Modal visible={showDeleteConfirm} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
                     <View style={styles.confirmModal}>
-                        <View style={styles.confirmIcon}>
+                        <View style={[styles.confirmIcon, { backgroundColor: theme.colors.error + '20' }]}>
                             <Ionicons name="warning" size={40} color={theme.colors.error} />
                         </View>
                         <Text style={styles.confirmTitle}>Delete Site?</Text>
                         <Text style={styles.confirmMessage}>
-                            This action cannot be undone. Type <Text style={styles.boldText}>{site.city}</Text> to confirm.
+                            This action cannot be undone. Type <Text style={styles.bold}>{site.city}</Text> to confirm.
                         </Text>
                         <TextInput
                             style={styles.confirmInput}
@@ -344,7 +354,10 @@ export default function SiteDetail() {
                             autoCapitalize="none"
                         />
                         <View style={styles.confirmButtons}>
-                            <TouchableOpacity style={styles.confirmCancel} onPress={() => { setShowDeleteConfirm(false); setConfirmText(''); }}>
+                            <TouchableOpacity
+                                style={styles.confirmCancel}
+                                onPress={() => setShowDeleteConfirm(false)}
+                            >
                                 <Text style={styles.confirmCancelText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.confirmDelete} onPress={handleDeleteSite}>
@@ -364,7 +377,7 @@ export default function SiteDetail() {
                         </View>
                         <Text style={styles.confirmTitle}>Close Site?</Text>
                         <Text style={styles.confirmMessage}>
-                            This will mark the site as closed. Type <Text style={styles.boldText}>{site.city}</Text> to confirm.
+                            This will mark the site as closed. Type <Text style={styles.bold}>{site.city}</Text> to confirm.
                         </Text>
                         <TextInput
                             style={styles.confirmInput}
@@ -374,10 +387,16 @@ export default function SiteDetail() {
                             autoCapitalize="none"
                         />
                         <View style={styles.confirmButtons}>
-                            <TouchableOpacity style={styles.confirmCancel} onPress={() => { setShowCloseConfirm(false); setConfirmText(''); }}>
+                            <TouchableOpacity
+                                style={styles.confirmCancel}
+                                onPress={() => setShowCloseConfirm(false)}
+                            >
                                 <Text style={styles.confirmCancelText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.confirmDelete, { backgroundColor: theme.colors.warning }]} onPress={handleCloseSite}>
+                            <TouchableOpacity
+                                style={[styles.confirmDelete, { backgroundColor: theme.colors.warning }]}
+                                onPress={handleCloseSite}
+                            >
                                 <Text style={styles.confirmDeleteText}>Close Site</Text>
                             </TouchableOpacity>
                         </View>
@@ -400,7 +419,7 @@ export default function SiteDetail() {
                         contentContainerStyle={{ padding: 16 }}
                         renderItem={({ item }) => (
                             <TouchableOpacity style={styles.engineerCard} onPress={() => handleAddEngineer(item)}>
-                                <View style={styles.engineerAvatar}>
+                                <View style={styles.avatar}>
                                     <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
                                 </View>
                                 <View style={styles.engineerInfo}>
@@ -423,8 +442,11 @@ export default function SiteDetail() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
     scrollView: { flex: 1 },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    errorText: { fontSize: 16, color: theme.colors.textSecondary },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+    errorText: { fontSize: 16, color: theme.colors.textSecondary, marginTop: 12 },
+    backBtn: { marginTop: 16, padding: 12, backgroundColor: theme.colors.primary, borderRadius: 8 },
+    backBtnText: { color: '#FFF', fontWeight: '600' },
+
     infoCard: {
         backgroundColor: theme.colors.cardBg,
         padding: 20,
@@ -447,16 +469,18 @@ const styles = StyleSheet.create({
     },
     infoLabel: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 6 },
     infoValue: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 2 },
-    clickableValue: { color: theme.colors.primary, textDecorationLine: 'underline' },
+    clickable: { color: theme.colors.primary, textDecorationLine: 'underline' },
+
     section: { padding: 16 },
     sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
-    editButton: { padding: 8, backgroundColor: theme.colors.primary + '15', borderRadius: 8 },
+    sectionTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, flex: 1 },
+    editBtn: { padding: 8, backgroundColor: theme.colors.primary + '15', borderRadius: 8 },
     editActions: { flexDirection: 'row', gap: 8 },
-    cancelButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme.colors.border },
-    cancelButtonText: { fontSize: 13, color: theme.colors.textSecondary },
-    saveButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: theme.colors.primary },
-    saveButtonText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+    cancelBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme.colors.border },
+    cancelBtnText: { fontSize: 13, color: theme.colors.textSecondary },
+    saveBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: theme.colors.primary },
+    saveBtnText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+
     engineerCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -465,7 +489,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginBottom: 8,
     },
-    engineerAvatar: {
+    avatar: {
         width: 44,
         height: 44,
         borderRadius: 22,
@@ -478,8 +502,8 @@ const styles = StyleSheet.create({
     engineerInfo: { flex: 1 },
     engineerName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
     engineerEmail: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
-    removeButton: { padding: 4 },
-    addEngineerButton: {
+
+    addEngineerBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -493,6 +517,7 @@ const styles = StyleSheet.create({
     },
     addEngineerText: { fontSize: 14, fontWeight: '500', color: theme.colors.primary },
     noEngineers: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', padding: 20 },
+
     actionsButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -506,6 +531,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     actionsButtonText: { fontSize: 15, fontWeight: '500', color: theme.colors.textPrimary },
+
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
     popup: {
         backgroundColor: theme.colors.cardBg,
@@ -520,6 +546,7 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     popupText: { fontSize: 16, color: theme.colors.textPrimary },
+
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
     confirmModal: {
         backgroundColor: theme.colors.cardBg,
@@ -533,14 +560,13 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: theme.colors.error + '20',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
     },
     confirmTitle: { fontSize: 22, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 8 },
     confirmMessage: { fontSize: 15, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 16 },
-    boldText: { fontWeight: '700', color: theme.colors.textPrimary },
+    bold: { fontWeight: '700', color: theme.colors.textPrimary },
     confirmInput: {
         width: '100%',
         padding: 14,
@@ -555,6 +581,7 @@ const styles = StyleSheet.create({
     confirmCancelText: { fontSize: 16, fontWeight: '600', color: theme.colors.textSecondary },
     confirmDelete: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: theme.colors.error, alignItems: 'center' },
     confirmDeleteText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+
     addEngineerModal: { flex: 1, backgroundColor: theme.colors.surface },
     modalHeader: {
         flexDirection: 'row',

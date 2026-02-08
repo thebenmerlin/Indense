@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,8 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { sitesApi, Site } from '../../../../src/api';
 
@@ -25,19 +26,19 @@ const theme = {
     }
 };
 
-export default function SitesList() {
+export default function SitesListPage() {
+    const router = useRouter();
     const [sites, setSites] = useState<Site[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const router = useRouter();
 
     const fetchSites = useCallback(async () => {
         try {
-            const response = await sitesApi.getAll({ 
+            const response = await sitesApi.getAll({
                 includeCounts: true,
                 isClosed: false,
             });
-            setSites(response.data);
+            setSites(response.data || []);
         } catch (error) {
             console.error('Failed to fetch sites:', error);
             Alert.alert('Error', 'Failed to load sites');
@@ -47,22 +48,24 @@ export default function SitesList() {
         }
     }, []);
 
-    // Refresh when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchSites();
         }, [fetchSites])
     );
 
-    const onRefresh = () => {
-        setRefreshing(true);
-        fetchSites();
+    const handleAddSite = () => {
+        router.push('/(director)/space/sites/add' as any);
     };
 
-    const renderSite = ({ item }: { item: Site }) => (
+    const handleOpenSite = (siteId: string) => {
+        router.push(`/(director)/space/sites/${siteId}` as any);
+    };
+
+    const renderSiteCard = ({ item }: { item: Site }) => (
         <TouchableOpacity
             style={styles.card}
-            onPress={() => router.push(`/(director)/space/sites/${item.id}` as any)}
+            onPress={() => handleOpenSite(item.id)}
             activeOpacity={0.7}
         >
             <View style={styles.cardIcon}>
@@ -72,13 +75,15 @@ export default function SitesList() {
                 <Text style={styles.siteName}>{item.name}</Text>
                 <View style={styles.locationRow}>
                     <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
-                    <Text style={styles.locationText}>{item.city || item.address || 'No location'}</Text>
+                    <Text style={styles.locationText}>
+                        {item.city || item.address || 'No location set'}
+                    </Text>
                 </View>
             </View>
             <View style={styles.cardRight}>
-                <View style={styles.indentBadge}>
-                    <Text style={styles.indentCount}>{item.indentCount || 0}</Text>
-                    <Text style={styles.indentLabel}>indents</Text>
+                <View style={styles.statBadge}>
+                    <Text style={styles.statValue}>{item.indentCount ?? 0}</Text>
+                    <Text style={styles.statLabel}>indents</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
             </View>
@@ -87,7 +92,7 @@ export default function SitesList() {
 
     if (loading && !refreshing) {
         return (
-            <View style={styles.loadingContainer}>
+            <View style={styles.centered}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
             </View>
         );
@@ -96,25 +101,31 @@ export default function SitesList() {
     return (
         <View style={styles.container}>
             {/* Add Site Button */}
-            <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => router.push('/(director)/space/sites/add' as any)}
-            >
+            <TouchableOpacity style={styles.addButton} onPress={handleAddSite}>
                 <Ionicons name="add-circle" size={22} color="#FFFFFF" />
                 <Text style={styles.addButtonText}>Add Site</Text>
             </TouchableOpacity>
 
+            {/* Sites List */}
             <FlatList
                 data={sites}
-                keyExtractor={item => item.id}
-                renderItem={renderSite}
+                keyExtractor={(item) => item.id}
+                renderItem={renderSiteCard}
                 contentContainerStyle={styles.list}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={() => {
+                            setRefreshing(true);
+                            fetchSites();
+                        }}
+                    />
+                }
                 ListEmptyComponent={
                     <View style={styles.empty}>
                         <Ionicons name="business-outline" size={56} color={theme.colors.textSecondary} />
-                        <Text style={styles.emptyText}>No sites yet</Text>
-                        <Text style={styles.emptySubtext}>Add your first site to get started</Text>
+                        <Text style={styles.emptyTitle}>No Sites Yet</Text>
+                        <Text style={styles.emptySubtitle}>Add your first site to get started</Text>
                     </View>
                 }
             />
@@ -124,7 +135,8 @@ export default function SitesList() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
     addButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -137,7 +149,9 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     addButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+
     list: { padding: 16, paddingTop: 8 },
+
     card: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -165,10 +179,11 @@ const styles = StyleSheet.create({
     locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
     locationText: { fontSize: 13, color: theme.colors.textSecondary },
     cardRight: { alignItems: 'flex-end', gap: 8 },
-    indentBadge: { alignItems: 'center' },
-    indentCount: { fontSize: 18, fontWeight: '700', color: theme.colors.primary },
-    indentLabel: { fontSize: 10, color: theme.colors.textSecondary },
+    statBadge: { alignItems: 'center' },
+    statValue: { fontSize: 18, fontWeight: '700', color: theme.colors.primary },
+    statLabel: { fontSize: 10, color: theme.colors.textSecondary },
+
     empty: { padding: 48, alignItems: 'center' },
-    emptyText: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 16 },
-    emptySubtext: { fontSize: 14, color: theme.colors.textSecondary, marginTop: 4 },
+    emptyTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 16 },
+    emptySubtitle: { fontSize: 14, color: theme.colors.textSecondary, marginTop: 4 },
 });

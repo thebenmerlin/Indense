@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { indentsApi } from '../../../../src/api/indents.api';
+import { damagesApi } from '../../../../src/api';
 import { Indent } from '../../../../src/types';
 
 const theme = {
@@ -33,11 +33,8 @@ export default function PartialOrdersList() {
 
     const fetchIndents = useCallback(async () => {
         try {
-            // Get indents with PARTIALLY_RECEIVED status
-            const response = await indentsApi.getAll({
-                status: 'PARTIALLY_RECEIVED',
-                limit: 50,
-            });
+            // Get indents with partially received/not received materials
+            const response = await damagesApi.getPartiallyReceivedIndents({ limit: 50 });
             // Sort by date, newest first
             const sortedData = [...response.data].sort(
                 (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

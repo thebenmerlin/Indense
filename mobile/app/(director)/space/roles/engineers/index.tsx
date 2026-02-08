@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { usersApi, UserResponse } from '../../../../../src/api/users.api';
 
@@ -29,23 +30,28 @@ export default function EngineersList() {
     const [engineers, setEngineers] = useState<UserResponse[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
     const fetchEngineers = useCallback(async () => {
         try {
+            setError(null);
             const data = await usersApi.getByRole('SITE_ENGINEER');
             setEngineers(data);
-        } catch (error) {
-            console.error('Failed to fetch engineers:', error);
+        } catch (err: any) {
+            console.error('Failed to fetch engineers:', err);
+            setError(err?.message || 'Failed to load engineers');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchEngineers();
-    }, [fetchEngineers]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchEngineers();
+        }, [fetchEngineers])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -89,6 +95,18 @@ export default function EngineersList() {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+        );
+    }
+
+    if (error) {
+        return (
+            <View style={styles.loadingContainer}>
+                <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
+                <Text style={{ color: theme.colors.error, marginTop: 12 }}>{error}</Text>
+                <TouchableOpacity onPress={fetchEngineers} style={{ marginTop: 16, padding: 12, backgroundColor: theme.colors.primary, borderRadius: 8 }}>
+                    <Text style={{ color: '#FFF', fontWeight: '600' }}>Retry</Text>
+                </TouchableOpacity>
             </View>
         );
     }

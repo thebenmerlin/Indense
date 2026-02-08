@@ -593,7 +593,7 @@ class ReturnsService {
                     site: { select: { name: true, code: true } },
                     createdBy: { select: { name: true } },
                     items: {
-                        where: { arrivalStatus: 'PARTIAL' },
+                        where: { arrivalStatus: { in: ['PARTIAL', 'NOT_ARRIVED'] } },
                         include: {
                             material: true,
                             damageReports: { where: { isResolved: false } },

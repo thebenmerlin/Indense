@@ -27,13 +27,13 @@ const theme = {
         border: '#D1D5DB',
         success: '#10B981',
         warning: '#F59E0B',
+        error: '#EF4444',
     }
 };
 
 interface PartialMaterial {
     item: IndentItem;
-    receivedQty: number;
-    pendingQty: number;
+    status: 'PARTIAL' | 'NOT_ARRIVED';
 }
 
 export default function PartialOrderDetail() {
@@ -69,12 +69,13 @@ export default function PartialOrderDetail() {
             setVendorName(data.order?.vendorName || '');
             setVendorContact(data.order?.vendorContact || '');
 
-            // Create mock partial materials
-            const partials: PartialMaterial[] = (data.items || []).map(item => ({
-                item,
-                receivedQty: Math.floor(item.requestedQty * 0.6),
-                pendingQty: Math.ceil(item.requestedQty * 0.4),
-            }));
+            // Use actual items with PARTIAL or NOT_ARRIVED status
+            const partials: PartialMaterial[] = (data.items || [])
+                .filter(item => item.arrivalStatus === 'PARTIAL' || item.arrivalStatus === 'NOT_ARRIVED')
+                .map(item => ({
+                    item,
+                    status: item.arrivalStatus as 'PARTIAL' | 'NOT_ARRIVED',
+                }));
             setPartialMaterials(partials);
         } catch (error) {
             console.error('Failed to fetch indent:', error);
@@ -159,7 +160,8 @@ export default function PartialOrderDetail() {
         );
     }
 
-    const totalPending = partialMaterials.reduce((sum, m) => sum + m.pendingQty, 0);
+    const partialCount = partialMaterials.filter(m => m.status === 'PARTIAL').length;
+    const notReceivedCount = partialMaterials.filter(m => m.status === 'NOT_ARRIVED').length;
 
     return (
         <View style={styles.container}>
@@ -198,34 +200,58 @@ export default function PartialOrderDetail() {
                     </View>
                 </View>
 
-                {/* Partial Materials List */}
+                {/* Materials List - Partial & Not Arrived */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Pending Materials</Text>
-                        <View style={styles.pendingBadge}>
-                            <Text style={styles.pendingBadgeText}>{totalPending} pending</Text>
+                        <Text style={styles.sectionTitle}>Problem Materials</Text>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            {partialCount > 0 && (
+                                <View style={styles.pendingBadge}>
+                                    <Text style={styles.pendingBadgeText}>{partialCount} partial</Text>
+                                </View>
+                            )}
+                            {notReceivedCount > 0 && (
+                                <View style={styles.notReceivedBadge}>
+                                    <Text style={styles.notReceivedBadgeText}>{notReceivedCount} not received</Text>
+                                </View>
+                            )}
                         </View>
                     </View>
-                    {partialMaterials.map((material) => (
-                        <TouchableOpacity
-                            key={material.item.id}
-                            style={styles.materialCard}
-                            onPress={() => openMaterialModal(material)}
-                        >
-                            <View style={styles.materialInfo}>
-                                <Text style={styles.materialName}>{material.item.material?.name}</Text>
-                                <Text style={styles.materialCode}>{material.item.material?.code}</Text>
-                                <View style={styles.qtyInfo}>
-                                    <Text style={styles.receivedLabel}>Received: </Text>
-                                    <Text style={styles.receivedValue}>{material.receivedQty}</Text>
-                                    <Text style={styles.pendingLabel}> | Pending: </Text>
-                                    <Text style={styles.pendingValue}>{material.pendingQty}</Text>
+                    {partialMaterials.map((material) => {
+                        const isNotArrived = material.status === 'NOT_ARRIVED';
+                        return (
+                            <TouchableOpacity
+                                key={material.item.id}
+                                style={[
+                                    styles.materialCard,
+                                    isNotArrived && styles.notArrivedCard
+                                ]}
+                                onPress={() => openMaterialModal(material)}
+                            >
+                                <View style={styles.materialInfo}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <Text style={styles.materialName}>{material.item.material?.name}</Text>
+                                        <View style={[
+                                            styles.statusChip,
+                                            isNotArrived ? styles.notArrivedChip : styles.partialChip
+                                        ]}>
+                                            <Text style={[
+                                                styles.statusChipText,
+                                                isNotArrived ? styles.notArrivedChipText : styles.partialChipText
+                                            ]}>
+                                                {isNotArrived ? 'NOT RECEIVED' : 'PARTIAL'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.materialCode}>{material.item.material?.code}</Text>
+                                    <Text style={styles.itemQtyText}>
+                                        Ordered: {material.item.requestedQty} {material.item.material?.unit?.code || ''}
+                                    </Text>
                                 </View>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-                    ))}
-                </View>
+                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        );
+                    })}                </View>
 
                 <View style={{ height: 120 }} />
             </ScrollView>
@@ -242,7 +268,7 @@ export default function PartialOrderDetail() {
                     ) : (
                         <>
                             <Ionicons name="refresh" size={20} color="#FFFFFF" />
-                            <Text style={styles.reorderButtonText}>Reorder Pending ({totalPending})</Text>
+                            <Text style={styles.reorderButtonText}>Reorder Materials ({partialMaterials.length})</Text>
                         </>
                     )}
                 </TouchableOpacity>
@@ -261,9 +287,16 @@ export default function PartialOrderDetail() {
                         <ScrollView style={styles.modalContent}>
                             <View style={styles.materialHeader}>
                                 <Text style={styles.materialModalName}>{selectedMaterial.item.material?.name}</Text>
-                                <View style={styles.qtyBox}>
-                                    <Text style={styles.qtyLabel}>Pending: </Text>
-                                    <Text style={styles.qtyNumber}>{selectedMaterial.pendingQty}</Text>
+                                <View style={[
+                                    styles.statusChip,
+                                    selectedMaterial.status === 'NOT_ARRIVED' ? styles.notArrivedChip : styles.partialChip
+                                ]}>
+                                    <Text style={[
+                                        styles.statusChipText,
+                                        selectedMaterial.status === 'NOT_ARRIVED' ? styles.notArrivedChipText : styles.partialChipText
+                                    ]}>
+                                        {selectedMaterial.status === 'NOT_ARRIVED' ? 'NOT RECEIVED' : 'PARTIAL'}
+                                    </Text>
                                 </View>
                             </View>
 
@@ -411,4 +444,18 @@ const styles = StyleSheet.create({
         marginTop: 24,
     },
     saveButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+    // New styles for NOT_ARRIVED distinction
+    notReceivedBadge: { backgroundColor: theme.colors.error + '20', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    notReceivedBadgeText: { fontSize: 12, fontWeight: '600', color: theme.colors.error },
+    notArrivedCard: {
+        borderColor: theme.colors.error + '40',
+        borderLeftColor: theme.colors.error,
+    },
+    statusChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+    notArrivedChip: { backgroundColor: theme.colors.error + '20' },
+    partialChip: { backgroundColor: theme.colors.warning + '20' },
+    statusChipText: { fontSize: 10, fontWeight: '700' },
+    notArrivedChipText: { color: theme.colors.error },
+    partialChipText: { color: theme.colors.warning },
+    itemQtyText: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
 });

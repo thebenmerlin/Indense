@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { indentsApi } from '../../../../src/api';
+import { Indent, IndentItem } from '../../../../src/types';
 
 const theme = {
     colors: {
@@ -22,60 +24,37 @@ const theme = {
         border: '#E2E8F0',
         warning: '#F59E0B',
         success: '#10B981',
+        error: '#EF4444',
     }
 };
 
-interface PartialItem {
-    id: string;
-    name: string;
-    orderedQty: number;
-    receivedQty: number;
-    unit: string;
-    pendingQty: number;
-    reorderStatus?: 'pending' | 'ordered' | 'received';
-}
-
-interface PartialOrder {
-    id: string;
-    indentName: string;
-    siteName: string;
-    siteEngineer: string;
-    reportedDate: string;
-    items: PartialItem[];
-}
+// No mock interfaces needed - using Indent and IndentItem from types
 
 export default function PartialOrderDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const [order, setOrder] = useState<PartialOrder | null>(null);
+    const [indent, setIndent] = useState<Indent | null>(null);
     const [loading, setLoading] = useState(true);
-    const [showItem, setShowItem] = useState<PartialItem | null>(null);
+    const [showItem, setShowItem] = useState<IndentItem | null>(null);
 
     useEffect(() => {
-        fetchOrder();
+        fetchIndent();
     }, [id]);
 
-    const fetchOrder = async () => {
+    const fetchIndent = async () => {
         try {
-            // TODO: Replace with actual API call
-            setOrder({
-                id: id!,
-                indentName: 'Plumbing Materials',
-                siteName: 'Riverside Complex',
-                siteEngineer: 'Amit Patel',
-                reportedDate: '2024-02-01',
-                items: [
-                    { id: '1', name: 'PVC Pipes 4 inch', orderedQty: 100, receivedQty: 60, pendingQty: 40, unit: 'pieces', reorderStatus: 'ordered' },
-                    { id: '2', name: 'Ball Valves', orderedQty: 50, receivedQty: 30, pendingQty: 20, unit: 'nos', reorderStatus: 'pending' },
-                    { id: '3', name: 'Pipe Fittings', orderedQty: 200, receivedQty: 200, pendingQty: 0, unit: 'nos' },
-                ],
-            });
+            const data = await indentsApi.getById(id!);
+            setIndent(data);
         } catch (error) {
-            console.error('Failed to fetch order:', error);
-            Alert.alert('Error', 'Failed to load partial order');
+            console.error('Failed to fetch indent:', error);
         } finally {
             setLoading(false);
         }
     };
+
+    // Filter to only show PARTIAL and NOT_ARRIVED items
+    const problemItems = indent?.items?.filter(
+        item => item.arrivalStatus === 'PARTIAL' || item.arrivalStatus === 'NOT_ARRIVED'
+    ) || [];
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-IN', {
@@ -85,16 +64,22 @@ export default function PartialOrderDetail() {
         });
     };
 
-    const getReorderStatusColor = (status?: string) => {
+    const getStatusColor = (status?: string | null) => {
         switch (status) {
-            case 'ordered': return theme.colors.primary;
-            case 'received': return theme.colors.success;
+            case 'NOT_ARRIVED': return theme.colors.error;
+            case 'PARTIAL': return theme.colors.warning;
+            case 'ARRIVED': return theme.colors.success;
             default: return theme.colors.textSecondary;
         }
     };
 
-    const calculateProgress = (received: number, ordered: number) => {
-        return Math.round((received / ordered) * 100);
+    const getStatusLabel = (status?: string | null) => {
+        switch (status) {
+            case 'NOT_ARRIVED': return 'NOT RECEIVED';
+            case 'PARTIAL': return 'PARTIAL';
+            case 'ARRIVED': return 'RECEIVED';
+            default: return 'PENDING';
+        }
     };
 
     if (loading) {
@@ -105,16 +90,16 @@ export default function PartialOrderDetail() {
         );
     }
 
-    if (!order) {
+    if (!indent) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={styles.errorText}>Order not found</Text>
+                <Text style={styles.errorText}>Indent not found</Text>
             </View>
         );
     }
 
-    const totalOrdered = order.items.reduce((sum, i) => sum + i.orderedQty, 0);
-    const totalReceived = order.items.reduce((sum, i) => sum + i.receivedQty, 0);
+    const partialCount = problemItems.filter(i => i.arrivalStatus === 'PARTIAL').length;
+    const notReceivedCount = problemItems.filter(i => i.arrivalStatus === 'NOT_ARRIVED').length;
 
     return (
         <View style={styles.container}>
@@ -124,16 +109,21 @@ export default function PartialOrderDetail() {
                     <View style={styles.headerIcon}>
                         <Ionicons name="pie-chart" size={32} color={theme.colors.warning} />
                     </View>
-                    <Text style={styles.indentName}>{order.indentName}</Text>
-                    <Text style={styles.subtitle}>{order.siteName}</Text>
+                    <Text style={styles.indentName}>{indent.name || indent.indentNumber}</Text>
+                    <Text style={styles.subtitle}>{indent.site?.name}</Text>
 
-                    {/* Overall Progress */}
-                    <View style={styles.progressCard}>
-                        <Text style={styles.progressLabel}>Overall Progress</Text>
-                        <View style={styles.progressBarBg}>
-                            <View style={[styles.progressBarFill, { width: `${calculateProgress(totalReceived, totalOrdered)}%` }]} />
-                        </View>
-                        <Text style={styles.progressText}>{calculateProgress(totalReceived, totalOrdered)}% received</Text>
+                    {/* Problem Summary */}
+                    <View style={styles.summaryRow}>
+                        {partialCount > 0 && (
+                            <View style={[styles.summaryBadge, { backgroundColor: theme.colors.warning + '20' }]}>
+                                <Text style={[styles.summaryText, { color: theme.colors.warning }]}>{partialCount} Partial</Text>
+                            </View>
+                        )}
+                        {notReceivedCount > 0 && (
+                            <View style={[styles.summaryBadge, { backgroundColor: theme.colors.error + '20' }]}>
+                                <Text style={[styles.summaryText, { color: theme.colors.error }]}>{notReceivedCount} Not Received</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 
@@ -141,49 +131,42 @@ export default function PartialOrderDetail() {
                 <View style={styles.infoCard}>
                     <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Site Engineer</Text>
-                        <Text style={styles.infoValue}>{order.siteEngineer}</Text>
+                        <Text style={styles.infoValue}>{indent.createdBy?.name || '-'}</Text>
                     </View>
                     <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Reported Date</Text>
-                        <Text style={styles.infoValue}>{formatDate(order.reportedDate)}</Text>
+                        <Text style={styles.infoLabel}>Created Date</Text>
+                        <Text style={styles.infoValue}>{formatDate(indent.createdAt)}</Text>
                     </View>
                 </View>
 
-                {/* Items */}
+                {/* Problem Items */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Items ({order.items.length})</Text>
-                    {order.items.map(item => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={styles.itemCard}
-                            onPress={() => setShowItem(item)}
-                        >
-                            <View style={styles.itemHeader}>
-                                <Text style={styles.itemName}>{item.name}</Text>
-                                {item.pendingQty > 0 && (
-                                    <View style={[styles.reorderBadge, { backgroundColor: getReorderStatusColor(item.reorderStatus) + '15' }]}>
-                                        <Text style={[styles.reorderText, { color: getReorderStatusColor(item.reorderStatus) }]}>
-                                            {item.reorderStatus === 'ordered' ? 'Reordered' : item.reorderStatus === 'received' ? 'Received' : 'Pending'}
+                    <Text style={styles.sectionTitle}>Problem Materials ({problemItems.length})</Text>
+                    {problemItems.map(item => {
+                        const isNotArrived = item.arrivalStatus === 'NOT_ARRIVED';
+                        const statusColor = getStatusColor(item.arrivalStatus);
+                        return (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={[styles.itemCard, { borderLeftColor: statusColor }]}
+                                onPress={() => setShowItem(item)}
+                            >
+                                <View style={styles.itemHeader}>
+                                    <Text style={styles.itemName}>{item.material?.name}</Text>
+                                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                                        <Text style={[styles.statusText, { color: statusColor }]}>
+                                            {getStatusLabel(item.arrivalStatus)}
                                         </Text>
                                     </View>
-                                )}
-                            </View>
+                                </View>
 
-                            <View style={styles.qtyRow}>
-                                <Text style={styles.qtyLabel}>Ordered: {item.orderedQty}</Text>
-                                <Text style={[styles.qtyLabel, { color: theme.colors.success }]}>Received: {item.receivedQty}</Text>
-                                {item.pendingQty > 0 && (
-                                    <Text style={[styles.qtyLabel, { color: theme.colors.warning }]}>Pending: {item.pendingQty}</Text>
-                                )}
-                            </View>
+                                <Text style={styles.itemCode}>{item.material?.code}</Text>
+                                <Text style={styles.qtyLabel}>Ordered: {item.requestedQty} {item.material?.unit?.code || ''}</Text>
 
-                            <View style={styles.itemProgressBg}>
-                                <View style={[styles.itemProgressFill, { width: `${calculateProgress(item.receivedQty, item.orderedQty)}%` }]} />
-                            </View>
-
-                            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} style={styles.itemChevron} />
-                        </TouchableOpacity>
-                    ))}
+                                <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} style={styles.itemChevron} />
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
 
                 <View style={{ height: 40 }} />
@@ -200,31 +183,24 @@ export default function PartialOrderDetail() {
                     </View>
                     {showItem && (
                         <ScrollView style={styles.modalContent}>
-                            <Text style={styles.modalItemName}>{showItem.name}</Text>
+                            <Text style={styles.modalItemName}>{showItem.material?.name}</Text>
 
+                            <View style={styles.modalInfoRow}>
+                                <Text style={styles.modalInfoLabel}>Material Code</Text>
+                                <Text style={styles.modalInfoValue}>{showItem.material?.code}</Text>
+                            </View>
                             <View style={styles.modalInfoRow}>
                                 <Text style={styles.modalInfoLabel}>Ordered Quantity</Text>
-                                <Text style={styles.modalInfoValue}>{showItem.orderedQty} {showItem.unit}</Text>
+                                <Text style={styles.modalInfoValue}>{showItem.requestedQty} {showItem.material?.unit?.code || ''}</Text>
                             </View>
                             <View style={styles.modalInfoRow}>
-                                <Text style={styles.modalInfoLabel}>Received Quantity</Text>
-                                <Text style={[styles.modalInfoValue, { color: theme.colors.success }]}>{showItem.receivedQty} {showItem.unit}</Text>
-                            </View>
-                            <View style={styles.modalInfoRow}>
-                                <Text style={styles.modalInfoLabel}>Pending Quantity</Text>
-                                <Text style={[styles.modalInfoValue, { color: theme.colors.warning }]}>{showItem.pendingQty} {showItem.unit}</Text>
-                            </View>
-
-                            {showItem.pendingQty > 0 && (
-                                <View style={styles.modalInfoRow}>
-                                    <Text style={styles.modalInfoLabel}>Reorder Status</Text>
-                                    <View style={[styles.reorderBadge, { backgroundColor: getReorderStatusColor(showItem.reorderStatus) + '15' }]}>
-                                        <Text style={[styles.reorderText, { color: getReorderStatusColor(showItem.reorderStatus) }]}>
-                                            {showItem.reorderStatus === 'ordered' ? 'Reordered' : showItem.reorderStatus === 'received' ? 'Received' : 'Pending'}
-                                        </Text>
-                                    </View>
+                                <Text style={styles.modalInfoLabel}>Status</Text>
+                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(showItem.arrivalStatus) + '20' }]}>
+                                    <Text style={[styles.statusText, { color: getStatusColor(showItem.arrivalStatus) }]}>
+                                        {getStatusLabel(showItem.arrivalStatus)}
+                                    </Text>
                                 </View>
-                            )}
+                            </View>
                         </ScrollView>
                     )}
                 </View>
@@ -323,4 +299,11 @@ const styles = StyleSheet.create({
     },
     modalInfoLabel: { fontSize: 15, color: theme.colors.textSecondary },
     modalInfoValue: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
+    // New styles for status display
+    summaryRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+    summaryBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+    summaryText: { fontSize: 13, fontWeight: '600' },
+    statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+    statusText: { fontSize: 11, fontWeight: '600' },
+    itemCode: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 },
 });
