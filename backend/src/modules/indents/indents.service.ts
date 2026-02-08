@@ -119,6 +119,13 @@ class IndentsService {
                 order: {
                     include: { orderItems: true },
                 },
+                receipts: {
+                    include: {
+                        images: true,
+                        createdBy: { select: { id: true, name: true } },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                },
             },
         });
 

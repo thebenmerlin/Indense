@@ -12,8 +12,15 @@ import {
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { indentsApi } from '../../../src/api';
-import { Indent, IndentItem } from '../../../src/types';
+import { UPLOADS_URL } from '../../../src/api/client';
+import { Indent, IndentItem, ReceiptImage } from '../../../src/types';
 import { STATUS_LABELS, STATUS_COLORS } from '../../../src/constants';
+
+// Helper to construct full image URL from relative path
+const getImageUrl = (imagePath: string) => {
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${UPLOADS_URL}/${imagePath}`;
+};
 
 const theme = {
     colors: {
@@ -35,6 +42,13 @@ export default function IndentDetail() {
     const [selectedMaterial, setSelectedMaterial] = useState<IndentItem | null>(null);
     const [showInvoiceViewer, setShowInvoiceViewer] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
+    const [showReceiptImageModal, setShowReceiptImageModal] = useState(false);
+    const [selectedReceiptImage, setSelectedReceiptImage] = useState<string | null>(null);
+
+    const openReceiptImage = (imagePath: string) => {
+        setSelectedReceiptImage(getImageUrl(imagePath));
+        setShowReceiptImageModal(true);
+    };
 
     useEffect(() => {
         if (id) fetchIndent();
@@ -175,6 +189,42 @@ export default function IndentDetail() {
                     ))}
                 </View>
 
+                {/* Receipt Images Section */}
+                {indent.receipts && indent.receipts.length > 0 && indent.receipts.some(r => r.images?.length > 0) && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>
+                            Receipt Photos ({indent.receipts.reduce((acc, r) => acc + (r.images?.length || 0), 0)})
+                        </Text>
+                        {indent.receipts.map((receipt) => (
+                            receipt.images && receipt.images.length > 0 && (
+                                <View key={receipt.id} style={styles.receiptGroup}>
+                                    <Text style={styles.receiptGroupTitle}>
+                                        {receipt.receiptNumber} • {new Date(receipt.receivedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                    </Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
+                                        {receipt.images.map((image, index) => (
+                                            <TouchableOpacity
+                                                key={image.id}
+                                                onPress={() => openReceiptImage(image.path)}
+                                                style={styles.imageContainer}
+                                            >
+                                                <Image
+                                                    source={{ uri: getImageUrl(image.path) }}
+                                                    style={styles.imageThumbnail}
+                                                />
+                                                <View style={styles.imageOverlay}>
+                                                    <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
+                                                    <Text style={styles.imageViewText}>View {index + 1}</Text>
+                                                </View>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            )
+                        ))}
+                    </View>
+                )}
+
                 <View style={{ height: 40 }} />
             </ScrollView>
 
@@ -251,6 +301,25 @@ export default function IndentDetail() {
                     <View style={styles.invoiceContent}>
                         <Text style={styles.invoicePlaceholder}>Invoice preview will appear here</Text>
                     </View>
+                </View>
+            </Modal>
+
+            {/* Receipt Image Preview Modal */}
+            <Modal visible={showReceiptImageModal} animationType="fade" transparent>
+                <View style={styles.imageModalContainer}>
+                    <View style={styles.imageModalHeader}>
+                        <Text style={styles.imageModalTitle}>Receipt Photo</Text>
+                        <TouchableOpacity onPress={() => setShowReceiptImageModal(false)}>
+                            <Ionicons name="close-circle" size={32} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    </View>
+                    {selectedReceiptImage && (
+                        <Image
+                            source={{ uri: selectedReceiptImage }}
+                            style={styles.fullImage}
+                            resizeMode="contain"
+                        />
+                    )}
                 </View>
             </Modal>
         </View>
@@ -334,4 +403,72 @@ const styles = StyleSheet.create({
     },
     invoiceContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     invoicePlaceholder: { fontSize: 16, color: '#FFFFFF' },
+    // Receipt images styles
+    receiptGroup: {
+        marginBottom: 16,
+    },
+    receiptGroupTitle: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: 8,
+        fontWeight: '500',
+    },
+    imagesScroll: {
+        marginTop: 4,
+    },
+    imageContainer: {
+        position: 'relative',
+        marginRight: 12,
+    },
+    imageThumbnail: {
+        width: 90,
+        height: 90,
+        borderRadius: 8,
+    },
+    imageOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 4,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+        gap: 4,
+    },
+    imageViewText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '600',
+    },
+    imageModalContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imageModalHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        paddingTop: 50,
+        zIndex: 10,
+    },
+    imageModalTitle: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '600',
+    },
+    fullImage: {
+        width: '100%',
+        height: '80%',
+    },
 });

@@ -78,6 +78,7 @@ export interface Site {
     state: string | null;
 }
 
+
 export interface Indent {
     id: string;
     indentNumber: string;
@@ -132,6 +133,8 @@ export interface Indent {
             vendorNatureOfBusiness?: string | null;
         }>;
     } | null;
+    // Receipts with images
+    receipts?: Receipt[];
     _count?: {
         damageReports?: number;
     };
