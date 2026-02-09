@@ -46,11 +46,14 @@ export default function PurchaseMemberDetail() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
-    const [showDemotePicker, setShowDemotePicker] = useState(false);
+    const [showSitePicker, setShowSitePicker] = useState(false);
     const [confirmText, setConfirmText] = useState('');
     const [sites, setSites] = useState<SiteOption[]>([]);
     const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
+
+    // Check if user has Site Engineer access
+    const hasSiteEngineerAccess = member?.allowedRoles?.includes('SITE_ENGINEER') || false;
 
     const fetchMember = useCallback(async () => {
         if (!id) return;
@@ -121,29 +124,52 @@ export default function PurchaseMemberDetail() {
         );
     };
 
-    const openDemotePicker = async () => {
+    const openSitePicker = async () => {
         await fetchSites();
-        setShowDemotePicker(true);
+        setShowSitePicker(true);
     };
 
-    const handleDemote = async () => {
-        if (!member || !selectedSiteId) {
+    const handleToggleSiteEngineer = async () => {
+        if (!member) return;
+
+        // If assigning, need a site
+        if (!hasSiteEngineerAccess && !selectedSiteId) {
             Alert.alert('Error', 'Please select a site to assign');
             return;
         }
+
         setActionLoading(true);
         try {
-            const updated = await usersApi.demote(member.id, selectedSiteId);
-            setMember(updated);
-            setShowDemotePicker(false);
-            Alert.alert('Success', `${member.name} has been demoted to Site Engineer`, [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
+            const result = await usersApi.toggleSiteEngineer(
+                member.id,
+                hasSiteEngineerAccess ? undefined : selectedSiteId!
+            );
+            setMember(result);
+            setShowSitePicker(false);
+            setSelectedSiteId(null);
+            Alert.alert(
+                'Success',
+                result.hasSiteEngineerAccess
+                    ? `${member.name} can now switch to Site Engineer role`
+                    : `${member.name}'s Site Engineer access has been removed`
+            );
         } catch (error: any) {
-            Alert.alert('Error', error?.message || 'Failed to demote');
+            Alert.alert('Error', error?.message || 'Failed to update role');
         } finally {
             setActionLoading(false);
         }
+    };
+
+    const handleRemoveSiteEngineer = () => {
+        if (!member) return;
+        Alert.alert(
+            'Remove Site Engineer Access',
+            `Are you sure you want to remove ${member.name}'s Site Engineer access? They will no longer be able to switch to Site Engineer role.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: handleToggleSiteEngineer }
+            ]
+        );
     };
 
     const handleRevoke = async () => {
@@ -211,7 +237,7 @@ export default function PurchaseMemberDetail() {
 
     return (
         <View style={styles.container}>
-            <ScrollView 
+            <ScrollView
                 style={styles.scrollView}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -288,10 +314,17 @@ export default function PurchaseMemberDetail() {
                                 )}
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.demoteButton} onPress={openDemotePicker} disabled={actionLoading}>
-                                <Ionicons name="arrow-down-circle" size={22} color={theme.colors.warning} />
-                                <Text style={styles.demoteButtonText}>Demote to Site Engineer</Text>
-                            </TouchableOpacity>
+                            {hasSiteEngineerAccess ? (
+                                <TouchableOpacity style={styles.removeRoleButton} onPress={handleRemoveSiteEngineer} disabled={actionLoading}>
+                                    <Ionicons name="remove-circle" size={22} color={theme.colors.warning} />
+                                    <Text style={styles.removeRoleButtonText}>Remove as Site Engineer</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <TouchableOpacity style={styles.assignRoleButton} onPress={openSitePicker} disabled={actionLoading}>
+                                    <Ionicons name="add-circle" size={22} color={theme.colors.success} />
+                                    <Text style={styles.assignRoleButtonText}>Assign as Site Engineer</Text>
+                                </TouchableOpacity>
+                            )}
 
                             <TouchableOpacity style={styles.revokeButton} onPress={() => setShowRevokeConfirm(true)} disabled={actionLoading}>
                                 <Ionicons name="ban" size={22} color={theme.colors.error} />
@@ -304,25 +337,25 @@ export default function PurchaseMemberDetail() {
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* Demote Site Picker Modal */}
-            <Modal visible={showDemotePicker} animationType="slide" presentationStyle="pageSheet">
+            {/* Site Picker Modal for Assigning SE Role */}
+            <Modal visible={showSitePicker} animationType="slide" presentationStyle="pageSheet">
                 <View style={styles.modal}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Select Site for Assignment</Text>
-                        <TouchableOpacity onPress={() => { setShowDemotePicker(false); setSelectedSiteId(null); }}>
+                        <Text style={styles.modalTitle}>Select Site to Assign</Text>
+                        <TouchableOpacity onPress={() => { setShowSitePicker(false); setSelectedSiteId(null); }}>
                             <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
                         </TouchableOpacity>
                     </View>
                     <Text style={styles.modalSubtitle}>
-                        When demoting to Site Engineer, you must assign them to a site.
+                        Select a site to assign to this Purchase Team member. They will be able to switch to Site Engineer role.
                     </Text>
                     <FlatList
                         data={sites}
                         keyExtractor={item => item.id}
                         contentContainerStyle={{ padding: 16 }}
                         renderItem={({ item }) => (
-                            <TouchableOpacity 
-                                style={[styles.siteOption, selectedSiteId === item.id && styles.siteOptionSelected]} 
+                            <TouchableOpacity
+                                style={[styles.siteOption, selectedSiteId === item.id && styles.siteOptionSelected]}
                                 onPress={() => setSelectedSiteId(item.id)}
                             >
                                 <Ionicons
@@ -341,15 +374,15 @@ export default function PurchaseMemberDetail() {
                         }
                     />
                     <View style={styles.modalFooter}>
-                        <TouchableOpacity 
-                            style={[styles.demoteModalButton, !selectedSiteId && styles.buttonDisabled]} 
-                            onPress={handleDemote}
+                        <TouchableOpacity
+                            style={[styles.assignModalButton, !selectedSiteId && styles.buttonDisabled]}
+                            onPress={handleToggleSiteEngineer}
                             disabled={!selectedSiteId || actionLoading}
                         >
                             {actionLoading ? (
                                 <ActivityIndicator size="small" color="#FFF" />
                             ) : (
-                                <Text style={styles.demoteModalButtonText}>Demote to Site Engineer</Text>
+                                <Text style={styles.assignModalButtonText}>Assign as Site Engineer</Text>
                             )}
                         </TouchableOpacity>
                     </View>
@@ -378,8 +411,8 @@ export default function PurchaseMemberDetail() {
                             <TouchableOpacity style={styles.confirmCancel} onPress={() => { setShowRevokeConfirm(false); setConfirmText(''); }}>
                                 <Text style={styles.confirmCancelText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={styles.confirmRevoke} 
+                            <TouchableOpacity
+                                style={styles.confirmRevoke}
                                 onPress={handleRevoke}
                                 disabled={actionLoading}
                             >
@@ -465,7 +498,18 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     promoteButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.purple },
-    demoteButton: {
+    assignRoleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.success + '15',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+        gap: 10,
+    },
+    assignRoleButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.success },
+    removeRoleButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -475,7 +519,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         gap: 10,
     },
-    demoteButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.warning },
+    removeRoleButtonText: { fontSize: 16, fontWeight: '600', color: theme.colors.warning },
     restoreButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -508,9 +552,9 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.cardBg,
     },
     modalTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary },
-    modalSubtitle: { 
-        fontSize: 14, 
-        color: theme.colors.textSecondary, 
+    modalSubtitle: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
         padding: 16,
         paddingBottom: 0,
     },
@@ -532,13 +576,13 @@ const styles = StyleSheet.create({
     siteOptionCode: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
     noSites: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', padding: 40 },
     modalFooter: { padding: 16, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.cardBg },
-    demoteModalButton: {
-        backgroundColor: theme.colors.warning,
+    assignModalButton: {
+        backgroundColor: theme.colors.success,
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',
     },
-    demoteModalButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+    assignModalButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
     buttonDisabled: { opacity: 0.5 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
     confirmModal: {

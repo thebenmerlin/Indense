@@ -55,7 +55,7 @@ export default function PartialOrderDetail() {
     const [newRate, setNewRate] = useState('');
     const [newTotal, setNewTotal] = useState('');
 
-    // Mock partial materials
+    // Partial materials (populated from API)
     const [partialMaterials, setPartialMaterials] = useState<PartialMaterial[]>([]);
 
     useEffect(() => {

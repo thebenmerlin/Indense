@@ -37,5 +37,7 @@ router.post(
 );
 router.post('/:id/revoke', requireDirector, usersController.revokeUser.bind(usersController));
 router.post('/:id/restore', requireDirector, usersController.restoreUser.bind(usersController));
+router.post('/:id/toggle-site-engineer', requireDirector, usersController.toggleSiteEngineer.bind(usersController));
 
 export default router;
+

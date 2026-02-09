@@ -13,6 +13,7 @@ export interface ExtendedUserResponse extends Omit<UserResponse, 'siteId' | 'sit
     sites: Array<{ id: string; name: string; code: string }>;
     isRevoked?: boolean;
     phone?: string | null;
+    allowedRoles?: string[];
 }
 
 class UsersService {
@@ -480,8 +481,110 @@ class UsersService {
             sites: updated.sites.map((us) => us.site),
             isActive: updated.isActive,
             isRevoked: updated.isRevoked,
+            allowedRoles: updated.allowedRoles,
             createdAt: updated.createdAt,
             lastLoginAt: updated.lastLoginAt,
+        };
+    }
+
+    /**
+     * Toggle Site Engineer role for a Purchase Team member
+     * - If user doesn't have SE in allowedRoles: add it + assign to site
+     * - If user has SE in allowedRoles: remove it + clear site assignments
+     */
+    async toggleSiteEngineerRole(
+        id: string,
+        currentUserId: string,
+        siteId?: string
+    ): Promise<ExtendedUserResponse & { hasSiteEngineerAccess: boolean }> {
+        const user = await prisma.user.findUnique({
+            where: { id },
+            include: {
+                sites: { include: { site: true } },
+            },
+        });
+
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        if (user.isRevoked) {
+            throw new BadRequestError('Cannot modify roles for a revoked user');
+        }
+
+        if (id === currentUserId) {
+            throw new ForbiddenError('Cannot modify your own roles');
+        }
+
+        if (user.role !== 'PURCHASE_TEAM') {
+            throw new BadRequestError('This action is only available for Purchase Team members');
+        }
+
+        const currentAllowedRoles: Role[] = (user.allowedRoles || []) as Role[];
+        const hasSiteEngineer = currentAllowedRoles.includes('SITE_ENGINEER');
+
+        let newAllowedRoles: Role[];
+        let newCurrentSiteId: string | null = user.currentSiteId;
+
+        if (hasSiteEngineer) {
+            // Remove Site Engineer access
+            newAllowedRoles = currentAllowedRoles.filter(r => r !== 'SITE_ENGINEER');
+            newCurrentSiteId = null;
+
+            // Remove all site assignments
+            await prisma.userSite.deleteMany({ where: { userId: id } });
+        } else {
+            // Add Site Engineer access
+            if (!siteId) {
+                throw new BadRequestError('Site ID is required when assigning Site Engineer role');
+            }
+
+            // Verify site exists
+            const site = await prisma.site.findUnique({ where: { id: siteId } });
+            if (!site) {
+                throw new BadRequestError('Site not found');
+            }
+
+            newAllowedRoles = [...currentAllowedRoles, 'SITE_ENGINEER' as Role];
+            newCurrentSiteId = siteId;
+
+            // Add site assignment
+            await prisma.userSite.upsert({
+                where: { userId_siteId: { userId: id, siteId } },
+                update: {},
+                create: { userId: id, siteId },
+            });
+        }
+
+        const updated = await prisma.user.update({
+            where: { id },
+            data: {
+                allowedRoles: newAllowedRoles,
+                currentSiteId: newCurrentSiteId,
+            },
+            include: {
+                currentSite: { select: { name: true } },
+                sites: {
+                    include: { site: { select: { id: true, name: true, code: true } } },
+                },
+            },
+        });
+
+        return {
+            id: updated.id,
+            email: updated.email,
+            name: updated.name,
+            role: updated.role,
+            phone: updated.phone,
+            currentSiteId: updated.currentSiteId,
+            currentSiteName: updated.currentSite?.name,
+            sites: updated.sites.map((us) => us.site),
+            isActive: updated.isActive,
+            isRevoked: updated.isRevoked,
+            allowedRoles: updated.allowedRoles,
+            createdAt: updated.createdAt,
+            lastLoginAt: updated.lastLoginAt,
+            hasSiteEngineerAccess: !hasSiteEngineer, // Returns new state after toggle
         };
     }
 }

@@ -66,7 +66,7 @@ export default function MaterialReport() {
     const fetchSites = async () => {
         try {
             const response = await sitesApi.getAll();
-            setSites(response);
+            setSites(response.data);
         } catch (error) {
             console.error('Failed to fetch sites:', error);
         }

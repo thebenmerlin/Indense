@@ -15,6 +15,7 @@ export interface User {
     currentSiteId: string | null;
     currentSiteName?: string;
     sites: Array<{ id: string; name: string; code: string }>;
+    allowedRoles?: UserRole[];
     isActive: boolean;
     isRevoked: boolean;
     createdAt: string;
@@ -120,6 +121,17 @@ export const usersApi = {
         const response = await apiClient.post(`/users/${id}/restore`);
         return response.data.data;
     },
+
+    /**
+     * Toggle Site Engineer role for Purchase Team member
+     * - Assigns SE role if not already assigned
+     * - Removes SE role if already assigned
+     */
+    async toggleSiteEngineer(id: string, siteId?: string): Promise<User & { hasSiteEngineerAccess: boolean }> {
+        const response = await apiClient.post(`/users/${id}/toggle-site-engineer`, { siteId });
+        return response.data.data;
+    },
 };
 
 export default usersApi;
+

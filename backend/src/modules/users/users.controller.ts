@@ -31,7 +31,7 @@ class UsersController {
         try {
             const { role } = req.params;
             const validRoles = ['SITE_ENGINEER', 'PURCHASE_TEAM', 'DIRECTOR'];
-            
+
             if (!validRoles.includes(role)) {
                 res.status(400).json({ success: false, message: 'Invalid role' });
                 return;
@@ -139,6 +139,23 @@ class UsersController {
                 success: true,
                 data: user,
                 message: 'User access restored',
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async toggleSiteEngineer(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const currentUserId = req.user!.id;
+            const { siteId } = req.body;
+            const result = await usersService.toggleSiteEngineerRole(req.params.id, currentUserId, siteId);
+            res.json({
+                success: true,
+                data: result,
+                message: result.hasSiteEngineerAccess
+                    ? 'Site Engineer role assigned'
+                    : 'Site Engineer role removed',
             });
         } catch (error) {
             next(error);
