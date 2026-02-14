@@ -12,8 +12,9 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { BASE_URL } from '../../src/api/client';
 
-const API_URL = 'https://indense.onrender.com/api/v1';
+const API_URL = BASE_URL;
 
 const theme = {
     colors: {

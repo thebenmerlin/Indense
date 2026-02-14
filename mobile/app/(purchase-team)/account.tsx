@@ -68,8 +68,7 @@ export default function AccountScreen() {
     const [showNewPassword, setShowNewPassword] = useState(false);
 
     // Determine if user can switch roles (allowedRoles is populated)
-    const userAny = user as any;
-    const allowedRoles: string[] = userAny?.allowedRoles || [];
+    const allowedRoles: string[] = user?.allowedRoles || [];
     const canSwitchRole = allowedRoles.length > 0;
 
     // Get the target role to switch to
@@ -331,17 +330,17 @@ export default function AccountScreen() {
                                     {user?.role ? ROLE_NAMES[user.role as Role] : '-'}
                                 </Text>
                             </View>
-                            {userAny?.phone && (
+                            {user?.phone && (
                                 <View style={styles.infoRow}>
                                     <Text style={styles.infoLabel}>Phone</Text>
-                                    <Text style={styles.infoValue}>{userAny.phone}</Text>
+                                    <Text style={styles.infoValue}>{user.phone}</Text>
                                 </View>
                             )}
-                            {userAny?.dob && (
+                            {user?.dob && (
                                 <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
                                     <Text style={styles.infoLabel}>Date of Birth</Text>
                                     <Text style={styles.infoValue}>
-                                        {new Date(userAny.dob).toLocaleDateString()}
+                                        {new Date(user.dob).toLocaleDateString()}
                                     </Text>
                                 </View>
                             )}

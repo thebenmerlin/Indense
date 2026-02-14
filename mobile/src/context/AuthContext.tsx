@@ -14,8 +14,15 @@ export interface AuthUser {
     email: string;
     name: string;
     role: string;
+    phone?: string;
+    dob?: string;
     siteId?: string;
     siteName?: string;
+    currentSiteId?: string;
+    currentSiteName?: string;
+    allowedRoles?: string[];
+    sites?: Array<{ id: string; name: string; code: string }>;
+    theme?: string;
 }
 
 // Auth context state

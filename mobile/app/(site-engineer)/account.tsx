@@ -75,8 +75,7 @@ export default function AccountScreen() {
     // Switch Sites states
     const [showSitesModal, setShowSitesModal] = useState(false);
     const [switchingSite, setSwitchingSite] = useState(false);
-    const userAny = user as any;
-    const assignedSites = userAny?.sites || [];
+    const assignedSites = user?.sites || [];
 
     // Change Password states
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -159,7 +158,7 @@ export default function AccountScreen() {
     };
 
     const handleSwitchSite = async (siteId: string, siteName: string) => {
-        if (siteId === userAny?.currentSiteId) {
+        if (siteId === user?.currentSiteId) {
             setShowSitesModal(false);
             return;
         }
@@ -548,16 +547,16 @@ export default function AccountScreen() {
                         </View>
                         <ScrollView style={styles.editModalBody}>
                             <Text style={styles.modalSubtitle}>Select the site you want to work on:</Text>
-                            {assignedSites.map((siteItem: any) => (
+                            {assignedSites.map((siteItem) => (
                                 <TouchableOpacity
-                                    key={siteItem.site?.id || siteItem.id}
+                                    key={siteItem.id}
                                     style={[
                                         styles.siteOption,
-                                        (siteItem.site?.id || siteItem.id) === userAny?.currentSiteId && styles.siteOptionSelected
+                                        siteItem.id === user?.currentSiteId && styles.siteOptionSelected
                                     ]}
                                     onPress={() => handleSwitchSite(
-                                        siteItem.site?.id || siteItem.id,
-                                        siteItem.site?.name || siteItem.name
+                                        siteItem.id,
+                                        siteItem.name
                                     )}
                                     disabled={switchingSite}
                                 >
@@ -565,18 +564,18 @@ export default function AccountScreen() {
                                         <Ionicons
                                             name="location"
                                             size={20}
-                                            color={(siteItem.site?.id || siteItem.id) === userAny?.currentSiteId
+                                            color={siteItem.id === user?.currentSiteId
                                                 ? theme.colors.primary
                                                 : theme.colors.textSecondary}
                                         />
                                         <Text style={[
                                             styles.siteOptionText,
-                                            (siteItem.site?.id || siteItem.id) === userAny?.currentSiteId && styles.siteOptionTextSelected
+                                            siteItem.id === user?.currentSiteId && styles.siteOptionTextSelected
                                         ]}>
-                                            {siteItem.site?.name || siteItem.name}
+                                            {siteItem.name}
                                         </Text>
                                     </View>
-                                    {(siteItem.site?.id || siteItem.id) === userAny?.currentSiteId && (
+                                    {siteItem.id === user?.currentSiteId && (
                                         <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />
                                     )}
                                 </TouchableOpacity>

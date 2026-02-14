@@ -14,8 +14,9 @@ import {
 import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { BASE_URL } from '../../src/api/client';
 
-const API_URL = 'https://indense.onrender.com/api/v1';
+const API_URL = BASE_URL;
 
 const theme = {
     colors: {
